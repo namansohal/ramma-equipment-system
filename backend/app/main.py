@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from app.database import engine, Base
-from app.models import locations, machines, users
+from app.models import locations, machines, users, spare_parts
 from app.routes import auth
 
 app = FastAPI(title="Ramma Equipment System")
