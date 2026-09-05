@@ -35,4 +35,8 @@ export const deactivateUser = (userId) => API.delete(`/users/${userId}`);
 export const getRoles = () => API.get('/users/roles');
 export const changePassword = (data) => API.post('/users/change-password', data);
 
+export const getDowntime = (params) => API.get('/downtime/', { params });
+export const createDowntime = (data) => API.post('/downtime/', data);
+export const endDowntime = (id, data) => API.patch(`/downtime/${id}/end`, data);
+
 export default API;

@@ -8,6 +8,7 @@ import Users from './pages/Users';
 import ChangePassword from './pages/ChangePassword';
 import Machines from './pages/Machines';
 import MachineDetail from './pages/MachineDetail';
+import Downtime from './pages/Downtime';
 
 function PrivateRoute({ children }) {
     const token = localStorage.getItem('token');
@@ -24,6 +25,7 @@ export default function App() {
                 <Route path="/stock" element={<PrivateRoute><Stock /></PrivateRoute>} />
                 <Route path="/machines" element={<PrivateRoute><Machines /></PrivateRoute>} />
                 <Route path="/machines/:id" element={<PrivateRoute><MachineDetail /></PrivateRoute>} />
+                <Route path="/downtime" element={<PrivateRoute><Downtime /></PrivateRoute>} />
                 <Route path="/users" element={<PrivateRoute><Users /></PrivateRoute>} />
                 <Route path="/change-password" element={<PrivateRoute><ChangePassword /></PrivateRoute>} />
                 <Route path="*" element={<Navigate to="/login" />} />

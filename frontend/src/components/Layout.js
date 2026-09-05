@@ -18,6 +18,7 @@ export default function Layout({ children }) {
         { path: '/expenses', label: 'Expenses', icon: '₵' },
         { path: '/stock', label: 'Spare Parts', icon: '⚙' },
         { path: '/machines', label: 'Machines', icon: '⬢' },
+        { path: '/downtime', label: 'Downtime', icon: '◔' },
     ];
     if (isAdmin) {
         navItems.push({ path: '/users', label: 'Employees', icon: '◈' });
