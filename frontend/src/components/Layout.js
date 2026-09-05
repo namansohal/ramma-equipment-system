@@ -15,6 +15,7 @@ export default function Layout({ children }) {
 
     const navItems = [
         { path: '/dashboard', label: 'Dashboard', icon: '▦' },
+        { path: '/mainbook', label: 'Mainbook', icon: '❐' },
         { path: '/expenses', label: 'Expenses', icon: '₵' },
         { path: '/stock', label: 'Spare Parts', icon: '⚙' },
         { path: '/machines', label: 'Machines', icon: '⬢' },
