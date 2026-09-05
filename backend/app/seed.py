@@ -82,5 +82,26 @@ def seed():
     finally:
         db.close()
 
+def seed_expense_types():
+    db = SessionLocal()
+    try:
+        from app.models.expenses import ExpenseType
+        if not db.query(ExpenseType).first():
+            types = [
+                ExpenseType(code="common",       label="Common"),
+                ExpenseType(code="machine",       label="Machine"),
+                ExpenseType(code="spare_part",    label="Spare Part"),
+                ExpenseType(code="loan",          label="Loan"),
+                ExpenseType(code="cash_receipt",  label="Cash Receipt"),
+            ]
+            db.add_all(types)
+            db.commit()
+            print("✓ Expense types created")
+        else:
+            print("- Expense types already exist, skipping")
+    finally:
+        db.close()
+
 if __name__ == "__main__":
     seed()
+    seed_expense_types()
