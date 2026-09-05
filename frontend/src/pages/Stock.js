@@ -1,89 +1,89 @@
 import React, { useState, useEffect } from 'react';
 import Layout from '../components/Layout';
-import { getParts, getCurrentStock, getStockHistory, createStockTxn, deleteStockTxn, getMachines } from '../services/api';
+import { getParts, getCurrentStock, getStockHistory, createStockTxn, deleteStockTxn, purchaseSparePart, getMachines, isViewer } from '../services/api';
 import * as ui from '../components/ui';
 
 export default function Stock() {
+    const viewer = isViewer();
     const [parts, setParts] = useState([]);
     const [machines, setMachines] = useState([]);
     const [stock, setStock] = useState([]);
     const [history, setHistory] = useState([]);
+    const [mode, setMode] = useState('issue'); // 'issue' | 'purchase'
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
     const [confirmId, setConfirmId] = useState(null);
-    const [form, setForm] = useState({
-        part_id: '',
-        txn_date: new Date().toISOString().split('T')[0],
-        direction: 'OUT',
-        quantity: '',
-        unit_price: '',
-        machine_id: '',
-        notes: '',
+
+    const [issueForm, setIssueForm] = useState({
+        part_id: '', txn_date: new Date().toISOString().split('T')[0],
+        direction: 'OUT', quantity: '', machine_id: '', notes: '',
+    });
+    const [buyForm, setBuyForm] = useState({
+        part_id: '', quantity: '', amount: '', txn_date: new Date().toISOString().split('T')[0],
+        supplier: '', notes: '',
     });
 
     useEffect(() => {
-        loadParts();
-        loadMachines();
-        loadStock();
-        loadHistory();
+        loadParts(); loadMachines(); loadStock(); loadHistory();
     }, []);
 
-    const loadParts = async () => {
-        try { const res = await getParts(); setParts(res.data); } catch (e) { console.error(e); }
-    };
-    const loadMachines = async () => {
-        try { const res = await getMachines(); setMachines(res.data); } catch (e) { console.error(e); }
-    };
-    const loadStock = async () => {
-        try { const res = await getCurrentStock(); setStock(res.data); } catch (e) { console.error(e); }
-    };
-    const loadHistory = async () => {
-        try { const res = await getStockHistory(); setHistory(res.data); } catch (e) { console.error(e); }
-    };
+    const loadParts = async () => { try { const r = await getParts(); setParts(r.data); } catch (e) { console.error(e); } };
+    const loadMachines = async () => { try { const r = await getMachines(); setMachines(r.data); } catch (e) { console.error(e); } };
+    const loadStock = async () => { try { const r = await getCurrentStock(); setStock(r.data); } catch (e) { console.error(e); } };
+    const loadHistory = async () => { try { const r = await getStockHistory(); setHistory(r.data); } catch (e) { console.error(e); } };
 
-    const handleChange = (e) => {
-        const { name, value } = e.target;
-        setForm(f => ({ ...f, [name]: value }));
-    };
+    const refreshAll = () => { loadStock(); loadHistory(); };
 
-    const handleSubmit = async (e) => {
+    const submitIssue = async (e) => {
         e.preventDefault();
-        setLoading(true);
-        setError('');
-        setSuccess('');
+        setLoading(true); setError(''); setSuccess('');
         try {
-            const payload = {
-                part_id: parseInt(form.part_id),
-                txn_date: form.txn_date,
-                direction: form.direction,
-                quantity: parseFloat(form.quantity),
-                unit_price: form.unit_price ? parseFloat(form.unit_price) : null,
-                total_amount: form.unit_price ? parseFloat(form.unit_price) * parseFloat(form.quantity) : null,
-                machine_id: form.direction === 'OUT' && form.machine_id ? parseInt(form.machine_id) : null,
-                notes: form.notes || null,
-            };
-            await createStockTxn(payload);
-            setSuccess(form.direction === 'IN' ? 'Stock received' : 'Part issued');
-            setForm(f => ({ ...f, part_id: '', quantity: '', unit_price: '', machine_id: '', notes: '' }));
-            loadStock();
-            loadHistory();
+            await createStockTxn({
+                part_id: parseInt(issueForm.part_id),
+                txn_date: issueForm.txn_date,
+                direction: 'OUT',
+                quantity: parseFloat(issueForm.quantity),
+                unit_price: null,
+                total_amount: null,
+                machine_id: issueForm.machine_id ? parseInt(issueForm.machine_id) : null,
+                notes: issueForm.notes || null,
+            });
+            setSuccess('Part issued');
+            setIssueForm(f => ({ ...f, part_id: '', quantity: '', machine_id: '', notes: '' }));
+            refreshAll();
         } catch (err) {
-            setError(err.response?.data?.detail || 'Failed to save transaction');
-        } finally {
-            setLoading(false);
-        }
+            setError(err.response?.data?.detail || 'Failed to issue part');
+        } finally { setLoading(false); }
+    };
+
+    const submitBuy = async (e) => {
+        e.preventDefault();
+        setLoading(true); setError(''); setSuccess('');
+        try {
+            const res = await purchaseSparePart({
+                part_id: parseInt(buyForm.part_id),
+                quantity: parseFloat(buyForm.quantity),
+                amount: parseFloat(buyForm.amount),
+                txn_date: buyForm.txn_date,
+                supplier: buyForm.supplier || null,
+                notes: buyForm.notes || null,
+            });
+            setSuccess(res.data.message);
+            setBuyForm(f => ({ ...f, part_id: '', quantity: '', amount: '', supplier: '', notes: '' }));
+            refreshAll();
+        } catch (err) {
+            setError(err.response?.data?.detail || 'Failed to record purchase');
+        } finally { setLoading(false); }
     };
 
     const handleDelete = async (id) => {
-        setError('');
-        setSuccess('');
+        setError(''); setSuccess('');
         try {
             const res = await deleteStockTxn(id);
             setSuccess(res.data.message);
             setConfirmId(null);
-            loadStock();
-            loadHistory();
+            refreshAll();
         } catch (err) {
             setError(err.response?.data?.detail || 'Failed to delete');
             setConfirmId(null);
@@ -92,71 +92,97 @@ export default function Stock() {
 
     return (
         <Layout>
-            <div style={ui.card}>
-                <div style={ui.cardTitle}>Stock Transaction</div>
-                {error && <div style={ui.alertError}>{error}</div>}
-                {success && <div style={ui.alertSuccess}>{success}</div>}
-                <form onSubmit={handleSubmit}>
-                    <div style={ui.row2}>
-                        <div style={ui.field}>
-                            <label style={ui.label}>Direction</label>
-                            <select style={ui.input} name="direction" value={form.direction} onChange={handleChange} required>
-                                <option value="OUT">OUT — Issue to machine</option>
-                                <option value="IN">IN — Receive stock</option>
-                            </select>
-                        </div>
-                        <div style={ui.field}>
-                            <label style={ui.label}>Date</label>
-                            <input style={ui.input} type="date" name="txn_date" value={form.txn_date} onChange={handleChange} required />
-                        </div>
+            {!viewer && (
+                <div style={ui.card}>
+                    <div style={styles.tabRow}>
+                        <button onClick={() => setMode('issue')} style={mode === 'issue' ? styles.tabActive : styles.tab}>Issue to Machine</button>
+                        <button onClick={() => setMode('purchase')} style={mode === 'purchase' ? styles.tabActive : styles.tab}>Buy / Receive Stock</button>
                     </div>
+                    {error && <div style={ui.alertError}>{error}</div>}
+                    {success && <div style={ui.alertSuccess}>{success}</div>}
 
-                    <div style={ui.field}>
-                        <label style={ui.label}>Part</label>
-                        <select style={ui.input} name="part_id" value={form.part_id} onChange={handleChange} required>
-                            <option value="">Select part</option>
-                            {parts.map(p => <option key={p.part_id} value={p.part_id}>{p.name}</option>)}
-                        </select>
-                    </div>
-
-                    {form.direction === 'OUT' && (
-                        <div style={ui.field}>
-                            <label style={ui.label}>Issue to machine</label>
-                            <select style={ui.input} name="machine_id" value={form.machine_id} onChange={handleChange} required>
-                                <option value="">Select machine</option>
-                                {machines.map(m => <option key={m.machine_id} value={m.machine_id}>{m.code}</option>)}
-                            </select>
-                        </div>
+                    {mode === 'issue' ? (
+                        <form onSubmit={submitIssue}>
+                            <div style={ui.field}>
+                                <label style={ui.label}>Part</label>
+                                <select style={ui.input} value={issueForm.part_id} onChange={e => setIssueForm(f => ({ ...f, part_id: e.target.value }))} required>
+                                    <option value="">Select part</option>
+                                    {parts.map(p => <option key={p.part_id} value={p.part_id}>{p.name}</option>)}
+                                </select>
+                            </div>
+                            <div style={ui.row2}>
+                                <div style={ui.field}>
+                                    <label style={ui.label}>Issue to machine</label>
+                                    <select style={ui.input} value={issueForm.machine_id} onChange={e => setIssueForm(f => ({ ...f, machine_id: e.target.value }))} required>
+                                        <option value="">Select machine</option>
+                                        {machines.map(m => <option key={m.machine_id} value={m.machine_id}>{m.code}</option>)}
+                                    </select>
+                                </div>
+                                <div style={ui.field}>
+                                    <label style={ui.label}>Quantity</label>
+                                    <input style={ui.input} type="number" value={issueForm.quantity} onChange={e => setIssueForm(f => ({ ...f, quantity: e.target.value }))} min="0" step="0.01" required />
+                                </div>
+                            </div>
+                            <div style={ui.row2}>
+                                <div style={ui.field}>
+                                    <label style={ui.label}>Date</label>
+                                    <input style={ui.input} type="date" value={issueForm.txn_date} onChange={e => setIssueForm(f => ({ ...f, txn_date: e.target.value }))} required />
+                                </div>
+                                <div style={ui.field}>
+                                    <label style={ui.label}>Notes (optional)</label>
+                                    <input style={ui.input} type="text" value={issueForm.notes} onChange={e => setIssueForm(f => ({ ...f, notes: e.target.value }))} />
+                                </div>
+                            </div>
+                            <button style={loading ? ui.btnDisabled : ui.btn} type="submit" disabled={loading}>
+                                {loading ? 'Saving...' : 'Issue Part'}
+                            </button>
+                        </form>
+                    ) : (
+                        <form onSubmit={submitBuy}>
+                            <div style={styles.hint}>Recording a purchase adds stock AND records the expense automatically.</div>
+                            <div style={ui.field}>
+                                <label style={ui.label}>Part</label>
+                                <select style={ui.input} value={buyForm.part_id} onChange={e => setBuyForm(f => ({ ...f, part_id: e.target.value }))} required>
+                                    <option value="">Select part</option>
+                                    {parts.map(p => <option key={p.part_id} value={p.part_id}>{p.name}</option>)}
+                                </select>
+                            </div>
+                            <div style={ui.row2}>
+                                <div style={ui.field}>
+                                    <label style={ui.label}>Quantity</label>
+                                    <input style={ui.input} type="number" value={buyForm.quantity} onChange={e => setBuyForm(f => ({ ...f, quantity: e.target.value }))} min="0" step="0.01" required />
+                                </div>
+                                <div style={ui.field}>
+                                    <label style={ui.label}>Total Amount (GHS)</label>
+                                    <input style={ui.input} type="number" value={buyForm.amount} onChange={e => setBuyForm(f => ({ ...f, amount: e.target.value }))} min="0" step="0.01" required />
+                                </div>
+                            </div>
+                            <div style={ui.row2}>
+                                <div style={ui.field}>
+                                    <label style={ui.label}>Supplier / Shop</label>
+                                    <input style={ui.input} type="text" value={buyForm.supplier} onChange={e => setBuyForm(f => ({ ...f, supplier: e.target.value }))} placeholder="Shop name" />
+                                </div>
+                                <div style={ui.field}>
+                                    <label style={ui.label}>Date</label>
+                                    <input style={ui.input} type="date" value={buyForm.txn_date} onChange={e => setBuyForm(f => ({ ...f, txn_date: e.target.value }))} required />
+                                </div>
+                            </div>
+                            <div style={ui.field}>
+                                <label style={ui.label}>Notes (optional)</label>
+                                <input style={ui.input} type="text" value={buyForm.notes} onChange={e => setBuyForm(f => ({ ...f, notes: e.target.value }))} />
+                            </div>
+                            <button style={loading ? ui.btnDisabled : ui.btn} type="submit" disabled={loading}>
+                                {loading ? 'Saving...' : 'Record Purchase'}
+                            </button>
+                        </form>
                     )}
-
-                    <div style={ui.row2}>
-                        <div style={ui.field}>
-                            <label style={ui.label}>Quantity</label>
-                            <input style={ui.input} type="number" name="quantity" value={form.quantity} onChange={handleChange} min="0" step="0.01" required />
-                        </div>
-                        <div style={ui.field}>
-                            <label style={ui.label}>Unit Price (GHS)</label>
-                            <input style={ui.input} type="number" name="unit_price" value={form.unit_price} onChange={handleChange} min="0" step="0.01" />
-                        </div>
-                    </div>
-
-                    <div style={ui.field}>
-                        <label style={ui.label}>Notes (optional)</label>
-                        <input style={ui.input} type="text" name="notes" value={form.notes} onChange={handleChange} />
-                    </div>
-
-                    <button style={loading ? ui.btnDisabled : ui.btn} type="submit" disabled={loading}>
-                        {loading ? 'Saving...' : (form.direction === 'IN' ? 'Receive Stock' : 'Issue Part')}
-                    </button>
-                </form>
-            </div>
+                </div>
+            )}
 
             <div style={ui.card}>
                 <div style={ui.cardTitle}>Current Stock</div>
                 <table style={ui.table}>
-                    <thead>
-                        <tr><th style={ui.th}>Part</th><th style={ui.th}>Available</th></tr>
-                    </thead>
+                    <thead><tr><th style={ui.th}>Part</th><th style={ui.th}>Available</th></tr></thead>
                     <tbody>
                         {stock.map(s => {
                             const qty = parseFloat(s.available);
@@ -164,9 +190,7 @@ export default function Stock() {
                             return (
                                 <tr key={s.part_id} style={ui.tr}>
                                     <td style={ui.td}>{s.name}</td>
-                                    <td style={ui.td}>
-                                        <span style={low ? styles.lowBadge : styles.okText}>{qty.toLocaleString()}</span>
-                                    </td>
+                                    <td style={ui.td}><span style={low ? styles.lowBadge : styles.okText}>{qty.toLocaleString()}</span></td>
                                 </tr>
                             );
                         })}
@@ -181,13 +205,7 @@ export default function Stock() {
                 <div style={ui.cardTitle}>Recent Transactions</div>
                 <table style={ui.table}>
                     <thead>
-                        <tr>
-                            <th style={ui.th}>Date</th>
-                            <th style={ui.th}>Part</th>
-                            <th style={ui.th}>Direction</th>
-                            <th style={ui.th}>Qty</th>
-                            <th style={ui.th}></th>
-                        </tr>
+                        <tr><th style={ui.th}>Date</th><th style={ui.th}>Part</th><th style={ui.th}>Direction</th><th style={ui.th}>Qty</th><th style={ui.th}></th></tr>
                     </thead>
                     <tbody>
                         {history.map(h => (
@@ -197,14 +215,14 @@ export default function Stock() {
                                 <td style={ui.td}>{h.direction}</td>
                                 <td style={ui.td}>{h.quantity}</td>
                                 <td style={{ ...ui.td, textAlign: 'right' }}>
-                                    {confirmId === h.stock_txn_id ? (
-                                        <span style={styles.confirmWrap}>
-                                            <button onClick={() => handleDelete(h.stock_txn_id)} style={styles.confirmYes}>Delete</button>
-                                            <button onClick={() => setConfirmId(null)} style={styles.confirmNo}>Cancel</button>
+                                    {!viewer && (confirmId === h.stock_txn_id ? (
+                                        <span style={styles.wrap}>
+                                            <button onClick={() => handleDelete(h.stock_txn_id)} style={styles.yes}>Delete</button>
+                                            <button onClick={() => setConfirmId(null)} style={styles.no}>Cancel</button>
                                         </span>
                                     ) : (
-                                        <button onClick={() => setConfirmId(h.stock_txn_id)} style={styles.delBtn}>Delete</button>
-                                    )}
+                                        <button onClick={() => setConfirmId(h.stock_txn_id)} style={styles.del}>Delete</button>
+                                    ))}
                                 </td>
                             </tr>
                         ))}
@@ -219,10 +237,14 @@ export default function Stock() {
 }
 
 const styles = {
+    tabRow: { display: 'flex', gap: '8px', marginBottom: '18px' },
+    tab: { padding: '9px 16px', backgroundColor: '#fff', color: ui.colors.inkSoft, border: `0.5px solid ${ui.colors.borderStrong}`, borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '500' },
+    tabActive: { padding: '9px 16px', backgroundColor: ui.colors.accentSoft, color: ui.colors.accent, border: `0.5px solid ${ui.colors.accent}`, borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '500' },
+    hint: { fontSize: '12px', color: ui.colors.muted, marginBottom: '14px' },
     lowBadge: { fontSize: '13px', fontWeight: '500', color: ui.colors.accent, backgroundColor: ui.colors.accentSoft, padding: '2px 10px', borderRadius: '20px' },
     okText: { fontSize: '14px', color: ui.colors.ink },
-    delBtn: { padding: '5px 12px', backgroundColor: '#fff', color: ui.colors.accent, border: `0.5px solid #f0c0c0`, borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: '500' },
-    confirmWrap: { display: 'inline-flex', gap: '6px' },
-    confirmYes: { padding: '5px 12px', backgroundColor: ui.colors.accent, color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: '500' },
-    confirmNo: { padding: '5px 12px', backgroundColor: '#fff', color: ui.colors.inkSoft, border: `0.5px solid ${ui.colors.borderStrong}`, borderRadius: '6px', cursor: 'pointer', fontSize: '12px' },
+    del: { padding: '5px 12px', backgroundColor: '#fff', color: ui.colors.accent, border: `0.5px solid #f0c0c0`, borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: '500' },
+    wrap: { display: 'inline-flex', gap: '6px' },
+    yes: { padding: '5px 12px', backgroundColor: ui.colors.accent, color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: '500' },
+    no: { padding: '5px 12px', backgroundColor: '#fff', color: ui.colors.inkSoft, border: `0.5px solid ${ui.colors.borderStrong}`, borderRadius: '6px', cursor: 'pointer', fontSize: '12px' },
 };

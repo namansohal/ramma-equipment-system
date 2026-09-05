@@ -30,6 +30,8 @@ export const getStockHistory = () => API.get('/stock/history');
 export const createStockTxn = (data) => API.post('/stock/', data);
 export const deleteStockTxn = (id) => API.delete(`/stock/${id}`);
 
+export const purchaseSparePart = (data) => API.post('/purchases/spare-part', data);
+
 export const getMachines = () => API.get('/machines/');
 
 export const getUsers = () => API.get('/users/');
@@ -55,6 +57,10 @@ export const getStaff = () => API.get('/staff/');
 export const createStaff = (data) => API.post('/staff/', data);
 export const updateStaff = (id, data) => API.patch(`/staff/${id}`, data);
 export const removeStaff = (id) => API.delete(`/staff/${id}`);
+
+export const getMainbook = (params) => API.get('/mainbook/', { params });
+export const createMainbook = (data) => API.post('/mainbook/', data);
+export const deleteMainbook = (id) => API.delete(`/mainbook/${id}`);
 
 export const currentUser = () => JSON.parse(localStorage.getItem('user') || '{}');
 export const isViewer = () => currentUser().role === 'viewer';

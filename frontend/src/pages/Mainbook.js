@@ -1,25 +1,32 @@
 import React, { useState, useEffect } from 'react';
 import Layout from '../components/Layout';
-import API from '../services/api';
+import { getMainbook, createMainbook, deleteMainbook, isViewer } from '../services/api';
 import * as ui from '../components/ui';
 
 export default function Mainbook() {
+    const viewer = isViewer();
     const [records, setRecords] = useState([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
     const [confirmId, setConfirmId] = useState(null);
+    const [filterDate, setFilterDate] = useState('');
     const [form, setForm] = useState({
         txn_date: new Date().toISOString().split('T')[0],
         description: '',
-        debit: '',
-        credit: '',
+        direction: 'in',        // 'in' = money in, 'out' = money out
+        amount: '',
+        destination: 'expense',
     });
 
-    useEffect(() => { loadRecords(); }, []);
+    useEffect(() => { loadRecords(); }, [filterDate]);
 
     const loadRecords = async () => {
-        try { const res = await API.get('/mainbook/'); setRecords(res.data); } catch (e) { console.error(e); }
+        try {
+            const params = filterDate ? { on_date: filterDate } : {};
+            const res = await getMainbook(params);
+            setRecords(res.data);
+        } catch (e) { console.error(e); }
     };
 
     const handleChange = (e) => {
@@ -33,14 +40,16 @@ export default function Mainbook() {
         setError('');
         setSuccess('');
         try {
-            await API.post('/mainbook/', {
+            const payload = {
                 txn_date: form.txn_date,
                 description: form.description,
-                debit: parseFloat(form.debit || 0),
-                credit: parseFloat(form.credit || 0),
-            });
+                debit: form.direction === 'out' ? parseFloat(form.amount || 0) : 0,
+                credit: form.direction === 'in' ? parseFloat(form.amount || 0) : 0,
+                destination: form.direction === 'out' ? form.destination : null,
+            };
+            await createMainbook(payload);
             setSuccess('Entry recorded');
-            setForm(f => ({ ...f, description: '', debit: '', credit: '' }));
+            setForm(f => ({ ...f, description: '', amount: '' }));
             loadRecords();
         } catch (err) {
             setError(err.response?.data?.detail || 'Failed to save');
@@ -53,7 +62,7 @@ export default function Mainbook() {
         setError('');
         setSuccess('');
         try {
-            const res = await API.delete(`/mainbook/${id}`);
+            const res = await deleteMainbook(id);
             setSuccess(res.data.message);
             setConfirmId(null);
             loadRecords();
@@ -65,37 +74,64 @@ export default function Mainbook() {
 
     return (
         <Layout>
-            <div style={ui.card}>
-                <div style={ui.cardTitle}>New Mainbook Entry</div>
-                {error && <div style={ui.alertError}>{error}</div>}
-                {success && <div style={ui.alertSuccess}>{success}</div>}
-                <form onSubmit={handleSubmit}>
-                    <div style={ui.field}>
-                        <label style={ui.label}>Date</label>
-                        <input style={ui.input} type="date" name="txn_date" value={form.txn_date} onChange={handleChange} required />
-                    </div>
-                    <div style={ui.field}>
-                        <label style={ui.label}>Description</label>
-                        <input style={ui.input} type="text" name="description" value={form.description} onChange={handleChange} required />
-                    </div>
-                    <div style={ui.row2}>
-                        <div style={ui.field}>
-                            <label style={ui.label}>Money Out / Debit (GHS)</label>
-                            <input style={ui.input} type="number" name="debit" value={form.debit} onChange={handleChange} min="0" step="0.01" />
+            {!viewer && (
+                <div style={ui.card}>
+                    <div style={ui.cardTitle}>New Mainbook Entry</div>
+                    {error && <div style={ui.alertError}>{error}</div>}
+                    {success && <div style={ui.alertSuccess}>{success}</div>}
+                    <form onSubmit={handleSubmit}>
+                        <div style={ui.row2}>
+                            <div style={ui.field}>
+                                <label style={ui.label}>Date</label>
+                                <input style={ui.input} type="date" name="txn_date" value={form.txn_date} onChange={handleChange} required />
+                            </div>
+                            <div style={ui.field}>
+                                <label style={ui.label}>Direction</label>
+                                <select style={ui.input} name="direction" value={form.direction} onChange={handleChange}>
+                                    <option value="in">Money In</option>
+                                    <option value="out">Money Out</option>
+                                </select>
+                            </div>
                         </div>
                         <div style={ui.field}>
-                            <label style={ui.label}>Money In / Credit (GHS)</label>
-                            <input style={ui.input} type="number" name="credit" value={form.credit} onChange={handleChange} min="0" step="0.01" />
+                            <label style={ui.label}>Description</label>
+                            <input style={ui.input} type="text" name="description" value={form.description} onChange={handleChange} required />
                         </div>
-                    </div>
-                    <button style={loading ? ui.btnDisabled : ui.btn} type="submit" disabled={loading}>
-                        {loading ? 'Saving...' : 'Save Entry'}
-                    </button>
-                </form>
-            </div>
+                        <div style={ui.row2}>
+                            <div style={ui.field}>
+                                <label style={ui.label}>Amount (GHS)</label>
+                                <input style={ui.input} type="number" name="amount" value={form.amount} onChange={handleChange} min="0" step="0.01" required />
+                            </div>
+                            {form.direction === 'out' && (
+                                <div style={ui.field}>
+                                    <label style={ui.label}>Where is it going?</label>
+                                    <select style={ui.input} name="destination" value={form.destination} onChange={handleChange}>
+                                        <option value="expense">Expense Book</option>
+                                        <option value="refund">Refund to Customer</option>
+                                        <option value="momo">MOMO</option>
+                                    </select>
+                                </div>
+                            )}
+                        </div>
+                        {form.direction === 'out' && form.destination === 'expense' && (
+                            <div style={styles.hint}>This will also appear as money-in in the Expense book.</div>
+                        )}
+                        <button style={loading ? ui.btnDisabled : ui.btn} type="submit" disabled={loading}>
+                            {loading ? 'Saving...' : 'Save Entry'}
+                        </button>
+                    </form>
+                </div>
+            )}
 
             <div style={ui.card}>
-                <div style={ui.cardTitle}>Mainbook Ledger</div>
+                <div style={styles.headRow}>
+                    <div style={ui.cardTitle}>Mainbook Ledger</div>
+                    <div style={styles.filterWrap}>
+                        <label style={styles.filterLabel}>Show date:</label>
+                        <input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)} style={styles.filterInput} />
+                        {filterDate && <button onClick={() => setFilterDate('')} style={styles.clearBtn}>All</button>}
+                    </div>
+                </div>
                 <table style={ui.table}>
                     <thead>
                         <tr>
@@ -116,19 +152,19 @@ export default function Mainbook() {
                                 <td style={ui.td}>{r.credit ? parseFloat(r.credit).toLocaleString() : '-'}</td>
                                 <td style={ui.td}>{r.balance ? parseFloat(r.balance).toLocaleString() : '-'}</td>
                                 <td style={{ ...ui.td, textAlign: 'right' }}>
-                                    {confirmId === r.transaction_id ? (
-                                        <span style={styles.confirmWrap}>
-                                            <button onClick={() => handleDelete(r.transaction_id)} style={styles.confirmYes}>Delete</button>
-                                            <button onClick={() => setConfirmId(null)} style={styles.confirmNo}>Cancel</button>
+                                    {!viewer && (confirmId === r.transaction_id ? (
+                                        <span style={styles.wrap}>
+                                            <button onClick={() => handleDelete(r.transaction_id)} style={styles.yes}>Delete</button>
+                                            <button onClick={() => setConfirmId(null)} style={styles.no}>Cancel</button>
                                         </span>
                                     ) : (
-                                        <button onClick={() => setConfirmId(r.transaction_id)} style={styles.delBtn}>Delete</button>
-                                    )}
+                                        <button onClick={() => setConfirmId(r.transaction_id)} style={styles.del}>Delete</button>
+                                    ))}
                                 </td>
                             </tr>
                         ))}
                         {records.length === 0 && (
-                            <tr><td colSpan="6" style={{ ...ui.td, textAlign: 'center', color: ui.colors.muted, padding: '24px' }}>No entries yet</td></tr>
+                            <tr><td colSpan="6" style={{ ...ui.td, textAlign: 'center', color: ui.colors.muted, padding: '24px' }}>No entries{filterDate ? ' for this date' : ''}</td></tr>
                         )}
                     </tbody>
                 </table>
@@ -138,8 +174,14 @@ export default function Mainbook() {
 }
 
 const styles = {
-    delBtn: { padding: '5px 12px', backgroundColor: '#fff', color: ui.colors.accent, border: `0.5px solid #f0c0c0`, borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: '500' },
-    confirmWrap: { display: 'inline-flex', gap: '6px' },
-    confirmYes: { padding: '5px 12px', backgroundColor: ui.colors.accent, color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: '500' },
-    confirmNo: { padding: '5px 12px', backgroundColor: '#fff', color: ui.colors.inkSoft, border: `0.5px solid ${ui.colors.borderStrong}`, borderRadius: '6px', cursor: 'pointer', fontSize: '12px' },
+    hint: { fontSize: '12px', color: ui.colors.muted, marginBottom: '14px', marginTop: '-6px' },
+    headRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' },
+    filterWrap: { display: 'flex', alignItems: 'center', gap: '8px' },
+    filterLabel: { fontSize: '12px', color: ui.colors.muted },
+    filterInput: { padding: '6px 8px', border: `0.5px solid ${ui.colors.borderStrong}`, borderRadius: '6px', fontSize: '13px' },
+    clearBtn: { padding: '6px 12px', backgroundColor: '#fff', color: ui.colors.inkSoft, border: `0.5px solid ${ui.colors.borderStrong}`, borderRadius: '6px', cursor: 'pointer', fontSize: '12px' },
+    del: { padding: '5px 12px', backgroundColor: '#fff', color: ui.colors.accent, border: `0.5px solid #f0c0c0`, borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: '500' },
+    wrap: { display: 'inline-flex', gap: '6px' },
+    yes: { padding: '5px 12px', backgroundColor: ui.colors.accent, color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: '500' },
+    no: { padding: '5px 12px', backgroundColor: '#fff', color: ui.colors.inkSoft, border: `0.5px solid ${ui.colors.borderStrong}`, borderRadius: '6px', cursor: 'pointer', fontSize: '12px' },
 };

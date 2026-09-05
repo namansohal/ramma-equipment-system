@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import Layout from '../components/Layout';
-import { createExpense, getExpenses, getExpenseTypes, getMachines, deleteExpense } from '../services/api';
+import { createExpense, getExpenses, getExpenseTypes, getMachines, deleteExpense, getParts, purchaseSparePart, isViewer } from '../services/api';
 import * as ui from '../components/ui';
 
 export default function Expenses() {
+    const viewer = isViewer();
     const [expenses, setExpenses] = useState([]);
     const [types, setTypes] = useState([]);
     const [machines, setMachines] = useState([]);
+    const [parts, setParts] = useState([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
@@ -18,26 +20,25 @@ export default function Expenses() {
         debit: '',
         credit: '',
         machine_ids: [],
+        // spare-part fields
+        part_id: '',
+        quantity: '',
+        supplier: '',
     });
 
     useEffect(() => {
-        loadTypes();
-        loadExpenses();
-        loadMachines();
+        loadTypes(); loadExpenses(); loadMachines(); loadParts();
     }, []);
 
-    const loadTypes = async () => {
-        try { const res = await getExpenseTypes(); setTypes(res.data); } catch (e) { console.error(e); }
-    };
-    const loadExpenses = async () => {
-        try { const res = await getExpenses(); setExpenses(res.data); } catch (e) { console.error(e); }
-    };
-    const loadMachines = async () => {
-        try { const res = await getMachines(); setMachines(res.data); } catch (e) { console.error(e); }
-    };
+    const loadTypes = async () => { try { const r = await getExpenseTypes(); setTypes(r.data); } catch (e) { console.error(e); } };
+    const loadExpenses = async () => { try { const r = await getExpenses(); setExpenses(r.data); } catch (e) { console.error(e); } };
+    const loadMachines = async () => { try { const r = await getMachines(); setMachines(r.data); } catch (e) { console.error(e); } };
+    const loadParts = async () => { try { const r = await getParts(); setParts(r.data); } catch (e) { console.error(e); } };
 
     const selectedType = types.find(t => t.type_id === parseInt(form.expense_type_id));
-    const showMachinePicker = selectedType && selectedType.code === 'machine';
+    const typeCode = selectedType?.code;
+    const showMachinePicker = typeCode === 'machine';
+    const showSparePart = typeCode === 'spare_part';
 
     const handleChange = (e) => {
         const { name, value } = e.target;
@@ -53,29 +54,42 @@ export default function Expenses() {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        setLoading(true);
-        setError('');
-        setSuccess('');
+        setLoading(true); setError(''); setSuccess('');
         try {
-            await createExpense({
-                ...form,
-                debit: parseFloat(form.debit || 0),
-                credit: parseFloat(form.credit || 0),
-                expense_type_id: parseInt(form.expense_type_id),
-            });
-            setSuccess('Expense recorded');
-            setForm(f => ({ ...f, description: '', debit: '', credit: '', machine_ids: [] }));
+            if (showSparePart) {
+                // route through purchase endpoint (updates stock + expense)
+                const res = await purchaseSparePart({
+                    part_id: parseInt(form.part_id),
+                    quantity: parseFloat(form.quantity),
+                    amount: parseFloat(form.debit),
+                    txn_date: form.txn_date,
+                    supplier: form.supplier || null,
+                    notes: null,
+                });
+                setSuccess(res.data.message);
+                setForm(f => ({ ...f, description: '', debit: '', credit: '', machine_ids: [], part_id: '', quantity: '', supplier: '' }));
+            } else {
+                await createExpense({
+                    txn_date: form.txn_date,
+                    description: form.description,
+                    expense_type_id: parseInt(form.expense_type_id),
+                    debit: parseFloat(form.debit || 0),
+                    credit: parseFloat(form.credit || 0),
+                    machine_ids: form.machine_ids,
+                });
+                setSuccess('Expense recorded');
+                setForm(f => ({ ...f, description: '', debit: '', credit: '', machine_ids: [] }));
+            }
             loadExpenses();
         } catch (err) {
-            setError(err.response?.data?.detail || 'Failed to save expense');
+            setError(err.response?.data?.detail || 'Failed to save');
         } finally {
             setLoading(false);
         }
     };
 
     const handleDelete = async (id) => {
-        setError('');
-        setSuccess('');
+        setError(''); setSuccess('');
         try {
             const res = await deleteExpense(id);
             setSuccess(res.data.message);
@@ -89,60 +103,92 @@ export default function Expenses() {
 
     return (
         <Layout>
-            <div style={ui.card}>
-                <div style={ui.cardTitle}>New Expense</div>
-                {error && <div style={ui.alertError}>{error}</div>}
-                {success && <div style={ui.alertSuccess}>{success}</div>}
-                <form onSubmit={handleSubmit}>
-                    <div style={ui.row2}>
-                        <div style={ui.field}>
-                            <label style={ui.label}>Date</label>
-                            <input style={ui.input} type="date" name="txn_date" value={form.txn_date} onChange={handleChange} required />
-                        </div>
-                        <div style={ui.field}>
-                            <label style={ui.label}>Type</label>
-                            <select style={ui.input} name="expense_type_id" value={form.expense_type_id} onChange={handleChange} required>
-                                <option value="">Select type</option>
-                                {types.map(t => <option key={t.type_id} value={t.type_id}>{t.label}</option>)}
-                            </select>
-                        </div>
-                    </div>
-
-                    {showMachinePicker && (
-                        <div style={ui.field}>
-                            <label style={ui.label}>Which machine(s)?</label>
-                            <div style={styles.chipRow}>
-                                {machines.map(m => (
-                                    <div key={m.machine_id} onClick={() => toggleMachine(m.machine_id)}
-                                        style={form.machine_ids.includes(m.machine_id) ? styles.chipActive : styles.chip}>
-                                        {m.code}
-                                    </div>
-                                ))}
+            {!viewer && (
+                <div style={ui.card}>
+                    <div style={ui.cardTitle}>New Expense</div>
+                    {error && <div style={ui.alertError}>{error}</div>}
+                    {success && <div style={ui.alertSuccess}>{success}</div>}
+                    <form onSubmit={handleSubmit}>
+                        <div style={ui.row2}>
+                            <div style={ui.field}>
+                                <label style={ui.label}>Date</label>
+                                <input style={ui.input} type="date" name="txn_date" value={form.txn_date} onChange={handleChange} required />
+                            </div>
+                            <div style={ui.field}>
+                                <label style={ui.label}>Type</label>
+                                <select style={ui.input} name="expense_type_id" value={form.expense_type_id} onChange={handleChange} required>
+                                    <option value="">Select type</option>
+                                    {types.map(t => <option key={t.type_id} value={t.type_id}>{t.label}</option>)}
+                                </select>
                             </div>
                         </div>
-                    )}
 
-                    <div style={ui.field}>
-                        <label style={ui.label}>Description</label>
-                        <input style={ui.input} type="text" name="description" value={form.description} onChange={handleChange} required />
-                    </div>
+                        {showMachinePicker && (
+                            <div style={ui.field}>
+                                <label style={ui.label}>Which machine(s)?</label>
+                                <div style={styles.chipRow}>
+                                    {machines.map(m => (
+                                        <div key={m.machine_id} onClick={() => toggleMachine(m.machine_id)}
+                                            style={form.machine_ids.includes(m.machine_id) ? styles.chipActive : styles.chip}>
+                                            {m.code}
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
 
-                    <div style={ui.row2}>
-                        <div style={ui.field}>
-                            <label style={ui.label}>Money Out / Debit (GHS)</label>
-                            <input style={ui.input} type="number" name="debit" value={form.debit} onChange={handleChange} min="0" step="0.01" />
-                        </div>
-                        <div style={ui.field}>
-                            <label style={ui.label}>Money In / Credit (GHS)</label>
-                            <input style={ui.input} type="number" name="credit" value={form.credit} onChange={handleChange} min="0" step="0.01" />
-                        </div>
-                    </div>
+                        {showSparePart ? (
+                            <>
+                                <div style={styles.hint}>This will add the part to stock and record the expense together.</div>
+                                <div style={ui.row2}>
+                                    <div style={ui.field}>
+                                        <label style={ui.label}>Part</label>
+                                        <select style={ui.input} name="part_id" value={form.part_id} onChange={handleChange} required>
+                                            <option value="">Select part</option>
+                                            {parts.map(p => <option key={p.part_id} value={p.part_id}>{p.name}</option>)}
+                                        </select>
+                                    </div>
+                                    <div style={ui.field}>
+                                        <label style={ui.label}>Quantity</label>
+                                        <input style={ui.input} type="number" name="quantity" value={form.quantity} onChange={handleChange} min="0" step="0.01" required />
+                                    </div>
+                                </div>
+                                <div style={ui.row2}>
+                                    <div style={ui.field}>
+                                        <label style={ui.label}>Total Amount (GHS)</label>
+                                        <input style={ui.input} type="number" name="debit" value={form.debit} onChange={handleChange} min="0" step="0.01" required />
+                                    </div>
+                                    <div style={ui.field}>
+                                        <label style={ui.label}>Supplier / Shop</label>
+                                        <input style={ui.input} type="text" name="supplier" value={form.supplier} onChange={handleChange} placeholder="Shop name" />
+                                    </div>
+                                </div>
+                            </>
+                        ) : (
+                            <>
+                                <div style={ui.field}>
+                                    <label style={ui.label}>Description</label>
+                                    <input style={ui.input} type="text" name="description" value={form.description} onChange={handleChange} required />
+                                </div>
+                                <div style={ui.row2}>
+                                    <div style={ui.field}>
+                                        <label style={ui.label}>Money Out / Debit (GHS)</label>
+                                        <input style={ui.input} type="number" name="debit" value={form.debit} onChange={handleChange} min="0" step="0.01" />
+                                    </div>
+                                    <div style={ui.field}>
+                                        <label style={ui.label}>Money In / Credit (GHS)</label>
+                                        <input style={ui.input} type="number" name="credit" value={form.credit} onChange={handleChange} min="0" step="0.01" />
+                                    </div>
+                                </div>
+                            </>
+                        )}
 
-                    <button style={loading ? ui.btnDisabled : ui.btn} type="submit" disabled={loading}>
-                        {loading ? 'Saving...' : 'Save Expense'}
-                    </button>
-                </form>
-            </div>
+                        <button style={loading ? ui.btnDisabled : ui.btn} type="submit" disabled={loading}>
+                            {loading ? 'Saving...' : (showSparePart ? 'Record Purchase' : 'Save Expense')}
+                        </button>
+                    </form>
+                </div>
+            )}
 
             <div style={ui.card}>
                 <div style={ui.cardTitle}>Recent Expenses</div>
@@ -166,14 +212,14 @@ export default function Expenses() {
                                 <td style={ui.td}>{e.credit ? parseFloat(e.credit).toLocaleString() : '-'}</td>
                                 <td style={ui.td}>{e.balance ? parseFloat(e.balance).toLocaleString() : '-'}</td>
                                 <td style={{ ...ui.td, textAlign: 'right' }}>
-                                    {confirmId === e.expense_id ? (
-                                        <span style={styles.confirmWrap}>
-                                            <button onClick={() => handleDelete(e.expense_id)} style={styles.confirmYes}>Delete</button>
-                                            <button onClick={() => setConfirmId(null)} style={styles.confirmNo}>Cancel</button>
+                                    {!viewer && (confirmId === e.expense_id ? (
+                                        <span style={styles.wrap}>
+                                            <button onClick={() => handleDelete(e.expense_id)} style={styles.yes}>Delete</button>
+                                            <button onClick={() => setConfirmId(null)} style={styles.no}>Cancel</button>
                                         </span>
                                     ) : (
-                                        <button onClick={() => setConfirmId(e.expense_id)} style={styles.delBtn}>Delete</button>
-                                    )}
+                                        <button onClick={() => setConfirmId(e.expense_id)} style={styles.del}>Delete</button>
+                                    ))}
                                 </td>
                             </tr>
                         ))}
@@ -191,8 +237,9 @@ const styles = {
     chipRow: { display: 'flex', flexWrap: 'wrap', gap: '8px' },
     chip: { padding: '8px 16px', border: `0.5px solid ${ui.colors.borderStrong}`, borderRadius: '8px', cursor: 'pointer', backgroundColor: '#fff', userSelect: 'none', fontSize: '13px', color: ui.colors.ink },
     chipActive: { padding: '8px 16px', border: `0.5px solid ${ui.colors.accent}`, borderRadius: '8px', cursor: 'pointer', backgroundColor: ui.colors.accentSoft, color: ui.colors.accent, userSelect: 'none', fontSize: '13px', fontWeight: '500' },
-    delBtn: { padding: '5px 12px', backgroundColor: '#fff', color: ui.colors.accent, border: `0.5px solid #f0c0c0`, borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: '500' },
-    confirmWrap: { display: 'inline-flex', gap: '6px' },
-    confirmYes: { padding: '5px 12px', backgroundColor: ui.colors.accent, color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: '500' },
-    confirmNo: { padding: '5px 12px', backgroundColor: '#fff', color: ui.colors.inkSoft, border: `0.5px solid ${ui.colors.borderStrong}`, borderRadius: '6px', cursor: 'pointer', fontSize: '12px' },
+    hint: { fontSize: '12px', color: ui.colors.muted, marginBottom: '14px' },
+    del: { padding: '5px 12px', backgroundColor: '#fff', color: ui.colors.accent, border: `0.5px solid #f0c0c0`, borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: '500' },
+    wrap: { display: 'inline-flex', gap: '6px' },
+    yes: { padding: '5px 12px', backgroundColor: ui.colors.accent, color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: '500' },
+    no: { padding: '5px 12px', backgroundColor: '#fff', color: ui.colors.inkSoft, border: `0.5px solid ${ui.colors.borderStrong}`, borderRadius: '6px', cursor: 'pointer', fontSize: '12px' },
 };
