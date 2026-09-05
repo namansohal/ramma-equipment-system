@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import Layout from '../components/Layout';
 import { getParts, getCurrentStock, createStockTxn, getMachines } from '../services/api';
+import * as ui from '../components/ui';
 
 export default function Stock() {
-    const navigate = useNavigate();
     const [parts, setParts] = useState([]);
     const [machines, setMachines] = useState([]);
     const [stock, setStock] = useState([]);
@@ -27,30 +27,13 @@ export default function Stock() {
     }, []);
 
     const loadParts = async () => {
-        try {
-            const res = await getParts();
-            setParts(res.data);
-        } catch (err) {
-            console.error('Failed to load parts', err);
-        }
+        try { const res = await getParts(); setParts(res.data); } catch (e) { console.error(e); }
     };
-
     const loadMachines = async () => {
-        try {
-            const res = await getMachines();
-            setMachines(res.data);
-        } catch (err) {
-            console.error('Failed to load machines', err);
-        }
+        try { const res = await getMachines(); setMachines(res.data); } catch (e) { console.error(e); }
     };
-
     const loadStock = async () => {
-        try {
-            const res = await getCurrentStock();
-            setStock(res.data);
-        } catch (err) {
-            console.error('Failed to load stock', err);
-        }
+        try { const res = await getCurrentStock(); setStock(res.data); } catch (e) { console.error(e); }
     };
 
     const handleChange = (e) => {
@@ -75,15 +58,8 @@ export default function Stock() {
                 notes: form.notes || null,
             };
             await createStockTxn(payload);
-            setSuccess(form.direction === 'IN' ? 'Stock received successfully' : 'Part issued successfully');
-            setForm(f => ({
-                ...f,
-                part_id: '',
-                quantity: '',
-                unit_price: '',
-                machine_id: '',
-                notes: '',
-            }));
+            setSuccess(form.direction === 'IN' ? 'Stock received' : 'Part issued');
+            setForm(f => ({ ...f, part_id: '', quantity: '', unit_price: '', machine_id: '', notes: '' }));
             loadStock();
         } catch (err) {
             setError(err.response?.data?.detail || 'Failed to save transaction');
@@ -93,113 +69,99 @@ export default function Stock() {
     };
 
     return (
-        <div style={styles.container}>
-            <div style={styles.header}>
-                <h2 style={{ margin: 0 }}>Spare Parts / Stock</h2>
-                <button onClick={() => navigate('/dashboard')} style={styles.back}>← Dashboard</button>
-            </div>
-
-            <div style={styles.formBox}>
-                <h3>Stock Transaction</h3>
-                {error && <div style={styles.error}>{error}</div>}
-                {success && <div style={styles.success}>{success}</div>}
+        <Layout>
+            <div style={ui.card}>
+                <div style={ui.cardTitle}>Stock Transaction</div>
+                {error && <div style={ui.alertError}>{error}</div>}
+                {success && <div style={ui.alertSuccess}>{success}</div>}
                 <form onSubmit={handleSubmit}>
-                    <div style={styles.row}>
-                        <div style={styles.field}>
-                            <label style={styles.label}>Direction</label>
-                            <select style={styles.input} name="direction" value={form.direction} onChange={handleChange} required>
+                    <div style={ui.row2}>
+                        <div style={ui.field}>
+                            <label style={ui.label}>Direction</label>
+                            <select style={ui.input} name="direction" value={form.direction} onChange={handleChange} required>
                                 <option value="OUT">OUT — Issue to machine</option>
                                 <option value="IN">IN — Receive stock</option>
                             </select>
                         </div>
-                        <div style={styles.field}>
-                            <label style={styles.label}>Date</label>
-                            <input style={styles.input} type="date" name="txn_date" value={form.txn_date} onChange={handleChange} required />
+                        <div style={ui.field}>
+                            <label style={ui.label}>Date</label>
+                            <input style={ui.input} type="date" name="txn_date" value={form.txn_date} onChange={handleChange} required />
                         </div>
                     </div>
 
-                    <div style={styles.field}>
-                        <label style={styles.label}>Part</label>
-                        <select style={styles.input} name="part_id" value={form.part_id} onChange={handleChange} required>
+                    <div style={ui.field}>
+                        <label style={ui.label}>Part</label>
+                        <select style={ui.input} name="part_id" value={form.part_id} onChange={handleChange} required>
                             <option value="">Select part</option>
                             {parts.map(p => <option key={p.part_id} value={p.part_id}>{p.name}</option>)}
                         </select>
                     </div>
 
                     {form.direction === 'OUT' && (
-                        <div style={styles.field}>
-                            <label style={styles.label}>Issue to machine</label>
-                            <select style={styles.input} name="machine_id" value={form.machine_id} onChange={handleChange} required>
+                        <div style={ui.field}>
+                            <label style={ui.label}>Issue to machine</label>
+                            <select style={ui.input} name="machine_id" value={form.machine_id} onChange={handleChange} required>
                                 <option value="">Select machine</option>
                                 {machines.map(m => <option key={m.machine_id} value={m.machine_id}>{m.code}</option>)}
                             </select>
                         </div>
                     )}
 
-                    <div style={styles.row}>
-                        <div style={styles.field}>
-                            <label style={styles.label}>Quantity</label>
-                            <input style={styles.input} type="number" name="quantity" value={form.quantity} onChange={handleChange} min="0" step="0.01" required />
+                    <div style={ui.row2}>
+                        <div style={ui.field}>
+                            <label style={ui.label}>Quantity</label>
+                            <input style={ui.input} type="number" name="quantity" value={form.quantity} onChange={handleChange} min="0" step="0.01" required />
                         </div>
-                        <div style={styles.field}>
-                            <label style={styles.label}>Unit Price (GHS)</label>
-                            <input style={styles.input} type="number" name="unit_price" value={form.unit_price} onChange={handleChange} min="0" step="0.01" />
+                        <div style={ui.field}>
+                            <label style={ui.label}>Unit Price (GHS)</label>
+                            <input style={ui.input} type="number" name="unit_price" value={form.unit_price} onChange={handleChange} min="0" step="0.01" />
                         </div>
                     </div>
 
-                    <div style={styles.field}>
-                        <label style={styles.label}>Notes (optional)</label>
-                        <input style={styles.input} type="text" name="notes" value={form.notes} onChange={handleChange} />
+                    <div style={ui.field}>
+                        <label style={ui.label}>Notes (optional)</label>
+                        <input style={ui.input} type="text" name="notes" value={form.notes} onChange={handleChange} />
                     </div>
 
-                    <button style={loading ? styles.btnDisabled : styles.btn} type="submit" disabled={loading}>
+                    <button style={loading ? ui.btnDisabled : ui.btn} type="submit" disabled={loading}>
                         {loading ? 'Saving...' : (form.direction === 'IN' ? 'Receive Stock' : 'Issue Part')}
                     </button>
                 </form>
             </div>
 
-            <div style={styles.tableBox}>
-                <h3>Current Stock</h3>
-                <table style={styles.table}>
+            <div style={ui.card}>
+                <div style={ui.cardTitle}>Current Stock</div>
+                <table style={ui.table}>
                     <thead>
                         <tr>
-                            <th style={styles.th}>Part</th>
-                            <th style={styles.th}>Available</th>
+                            <th style={ui.th}>Part</th>
+                            <th style={ui.th}>Available</th>
                         </tr>
                     </thead>
                     <tbody>
-                        {stock.map(s => (
-                            <tr key={s.part_id} style={styles.tr}>
-                                <td style={styles.td}>{s.name}</td>
-                                <td style={styles.td}>{parseFloat(s.available).toLocaleString()}</td>
-                            </tr>
-                        ))}
+                        {stock.map(s => {
+                            const qty = parseFloat(s.available);
+                            const low = qty <= 5;
+                            return (
+                                <tr key={s.part_id} style={ui.tr}>
+                                    <td style={ui.td}>{s.name}</td>
+                                    <td style={ui.td}>
+                                        <span style={low ? styles.lowBadge : styles.okText}>{qty.toLocaleString()}</span>
+                                    </td>
+                                </tr>
+                            );
+                        })}
                         {stock.length === 0 && (
-                            <tr><td colSpan="2" style={{ textAlign: 'center', padding: '24px', color: '#999' }}>No stock recorded yet</td></tr>
+                            <tr><td colSpan="2" style={{ ...ui.td, textAlign: 'center', color: ui.colors.muted, padding: '24px' }}>No stock recorded yet</td></tr>
                         )}
                     </tbody>
                 </table>
             </div>
-        </div>
+        </Layout>
     );
 }
 
 const styles = {
-    container: { padding: '24px', backgroundColor: '#f0f2f5', minHeight: '100vh' },
-    header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' },
-    back: { padding: '8px 16px', backgroundColor: '#fff', border: '1px solid #d9d9d9', borderRadius: '4px', cursor: 'pointer' },
-    formBox: { backgroundColor: '#fff', padding: '24px', borderRadius: '8px', boxShadow: '0 1px 4px rgba(0,0,0,0.1)', marginBottom: '24px' },
-    tableBox: { backgroundColor: '#fff', padding: '24px', borderRadius: '8px', boxShadow: '0 1px 4px rgba(0,0,0,0.1)' },
-    row: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' },
-    field: { marginBottom: '16px' },
-    label: { display: 'block', marginBottom: '4px', fontWeight: '500', color: '#333' },
-    input: { width: '100%', padding: '8px', border: '1px solid #d9d9d9', borderRadius: '4px', fontSize: '14px', boxSizing: 'border-box' },
-    btn: { padding: '10px 24px', backgroundColor: '#1890ff', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '14px' },
-    btnDisabled: { padding: '10px 24px', backgroundColor: '#91caff', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'not-allowed', fontSize: '14px' },
-    error: { backgroundColor: '#fff2f0', border: '1px solid #ffccc7', color: '#cf1322', padding: '8px 12px', borderRadius: '4px', marginBottom: '16px' },
-    success: { backgroundColor: '#f6ffed', border: '1px solid #b7eb8f', color: '#389e0d', padding: '8px 12px', borderRadius: '4px', marginBottom: '16px' },
-    table: { width: '100%', borderCollapse: 'collapse' },
-    th: { padding: '12px', textAlign: 'left', borderBottom: '1px solid #f0f0f0', fontWeight: '600', color: '#555' },
-    tr: { borderBottom: '1px solid #f0f0f0' },
-    td: { padding: '12px', color: '#333' },
+    lowBadge: { fontSize: '13px', fontWeight: '500', color: ui.colors.accent, backgroundColor: ui.colors.accentSoft, padding: '2px 10px', borderRadius: '20px' },
+    okText: { fontSize: '14px', color: ui.colors.ink },
 };
