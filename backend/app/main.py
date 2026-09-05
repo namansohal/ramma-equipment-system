@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.database import engine, Base
 from app.models import locations, machines, users, spare_parts, expenses, stock, audit
-from app.routes import auth, expenses as expenses_router, stock as stock_router, machines as machines_router, users as users_router
+from app.routes import auth, expenses as expenses_router, stock as stock_router, machines as machines_router, users as users_router, machine_detail as machine_detail_router
 
 app = FastAPI(title="Ramma Equipment System")
 
@@ -21,6 +21,7 @@ app.include_router(expenses_router.router)
 app.include_router(stock_router.router)
 app.include_router(machines_router.router)
 app.include_router(users_router.router)
+app.include_router(machine_detail_router.router)
 
 
 @app.get("/")

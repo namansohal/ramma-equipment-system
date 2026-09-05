@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { login } from '../services/api';
+import { colors } from '../components/ui';
 
 export default function Login() {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
-    const [error,    setError]    = useState('');
-    const [loading,  setLoading]  = useState(false);
+    const [error, setError] = useState('');
+    const [loading, setLoading] = useState(false);
     const navigate = useNavigate();
 
     const handleSubmit = async (e) => {
@@ -16,7 +17,7 @@ export default function Login() {
         try {
             const res = await login(username, password);
             localStorage.setItem('token', res.data.access_token);
-            localStorage.setItem('user',  JSON.stringify(res.data.user));
+            localStorage.setItem('user', JSON.stringify(res.data.user));
             navigate('/dashboard');
         } catch (err) {
             setError('Incorrect username or password');
@@ -28,6 +29,9 @@ export default function Login() {
     return (
         <div style={styles.container}>
             <div style={styles.box}>
+                <div style={styles.logoRow}>
+                    <img src="/logo_r.jpeg" alt="Ramma" style={styles.logo} />
+                </div>
                 <h2 style={styles.title}>Ramma Equipment</h2>
                 <p style={styles.subtitle}>Company Management System</p>
                 {error && <div style={styles.error}>{error}</div>}
@@ -57,23 +61,27 @@ export default function Login() {
                         type="submit"
                         disabled={loading}
                     >
-                        {loading ? 'Logging in...' : 'Login'}
+                        {loading ? 'Signing in...' : 'Sign In'}
                     </button>
                 </form>
             </div>
+            <div style={styles.footer}>Ramma Equipment Co. · Kade</div>
         </div>
     );
 }
 
 const styles = {
-    container:      { display:'flex', justifyContent:'center', alignItems:'center', height:'100vh', backgroundColor:'#f0f2f5' },
-    box:            { backgroundColor:'#fff', padding:'40px', borderRadius:'8px', boxShadow:'0 2px 10px rgba(0,0,0,0.1)', width:'360px' },
-    title:          { margin:0, fontSize:'24px', fontWeight:'bold', color:'#1a1a1a', textAlign:'center' },
-    subtitle:       { textAlign:'center', color:'#666', marginBottom:'24px' },
-    error:          { backgroundColor:'#fff2f0', border:'1px solid #ffccc7', color:'#cf1322', padding:'8px 12px', borderRadius:'4px', marginBottom:'16px' },
-    field:          { marginBottom:'16px' },
-    label:          { display:'block', marginBottom:'4px', fontWeight:'500', color:'#333' },
-    input:          { width:'100%', padding:'10px', border:'1px solid #d9d9d9', borderRadius:'4px', fontSize:'14px', boxSizing:'border-box' },
-    button:         { width:'100%', padding:'10px', backgroundColor:'#1890ff', color:'#fff', border:'none', borderRadius:'4px', fontSize:'16px', cursor:'pointer' },
-    buttonDisabled: { width:'100%', padding:'10px', backgroundColor:'#91caff', color:'#fff', border:'none', borderRadius:'4px', fontSize:'16px', cursor:'not-allowed' },
+    container: { display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', height: '100vh', backgroundColor: colors.page, fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' },
+    box: { backgroundColor: '#fff', padding: '40px', borderRadius: '14px', border: `0.5px solid ${colors.border}`, width: '360px' },
+    logoRow: { display: 'flex', justifyContent: 'center', marginBottom: '18px' },
+    logo: { width: '56px', height: '56px', borderRadius: '12px', objectFit: 'cover' },
+    title: { margin: 0, fontSize: '22px', fontWeight: '500', color: colors.ink, textAlign: 'center', letterSpacing: '-0.3px' },
+    subtitle: { textAlign: 'center', color: colors.muted, marginTop: '4px', marginBottom: '28px', fontSize: '13px' },
+    error: { backgroundColor: colors.accentSoft, border: '0.5px solid #fecaca', color: colors.accent, padding: '10px 14px', borderRadius: '8px', marginBottom: '18px', fontSize: '13px' },
+    field: { marginBottom: '18px' },
+    label: { display: 'block', marginBottom: '6px', fontWeight: '500', color: colors.inkSoft, fontSize: '13px' },
+    input: { width: '100%', padding: '11px 12px', border: `0.5px solid ${colors.borderStrong}`, borderRadius: '8px', fontSize: '14px', boxSizing: 'border-box', outline: 'none', color: colors.ink },
+    button: { width: '100%', padding: '12px', backgroundColor: colors.accent, color: '#fff', border: 'none', borderRadius: '8px', fontSize: '15px', fontWeight: '500', cursor: 'pointer', marginTop: '4px' },
+    buttonDisabled: { width: '100%', padding: '12px', backgroundColor: '#e6a5a5', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '15px', fontWeight: '500', cursor: 'not-allowed', marginTop: '4px' },
+    footer: { marginTop: '20px', fontSize: '12px', color: colors.muted },
 };

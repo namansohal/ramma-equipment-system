@@ -6,6 +6,8 @@ import Expenses from './pages/Expenses';
 import Stock from './pages/Stock';
 import Users from './pages/Users';
 import ChangePassword from './pages/ChangePassword';
+import Machines from './pages/Machines';
+import MachineDetail from './pages/MachineDetail';
 
 function PrivateRoute({ children }) {
     const token = localStorage.getItem('token');
@@ -20,6 +22,8 @@ export default function App() {
                 <Route path="/dashboard" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
                 <Route path="/expenses" element={<PrivateRoute><Expenses /></PrivateRoute>} />
                 <Route path="/stock" element={<PrivateRoute><Stock /></PrivateRoute>} />
+                <Route path="/machines" element={<PrivateRoute><Machines /></PrivateRoute>} />
+                <Route path="/machines/:id" element={<PrivateRoute><MachineDetail /></PrivateRoute>} />
                 <Route path="/users" element={<PrivateRoute><Users /></PrivateRoute>} />
                 <Route path="/change-password" element={<PrivateRoute><ChangePassword /></PrivateRoute>} />
                 <Route path="*" element={<Navigate to="/login" />} />

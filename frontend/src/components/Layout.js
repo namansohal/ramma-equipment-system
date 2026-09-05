@@ -9,7 +9,7 @@ export default function Layout({ children }) {
     const isAdmin = user.role === 'owner' || user.role === 'manager';
 
     const logout = () => {
-        localStorage.clear();
+        localStorage.clear();   
         navigate('/login');
     };
 
@@ -17,6 +17,7 @@ export default function Layout({ children }) {
         { path: '/dashboard', label: 'Dashboard', icon: '▦' },
         { path: '/expenses', label: 'Expenses', icon: '₵' },
         { path: '/stock', label: 'Spare Parts', icon: '⚙' },
+        { path: '/machines', label: 'Machines', icon: '⬢' },
     ];
     if (isAdmin) {
         navItems.push({ path: '/users', label: 'Employees', icon: '◈' });
