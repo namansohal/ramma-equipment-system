@@ -23,6 +23,7 @@ export default function Layout({ children }) {
         { path: '/reports', label: 'Reports', icon: '▤' },
     ];
     if (isAdmin) {
+        navItems.push({ path: '/audit', label: 'Activity Log', icon: '☰' });
         navItems.push({ path: '/users', label: 'Employees', icon: '◈' });
     }
 
