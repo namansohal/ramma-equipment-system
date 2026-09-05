@@ -1,16 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import Layout from '../components/Layout';
-import { getUsers, createUser, getRoles, deactivateUser } from '../services/api';
+import { getUsers, createUser, getRoles, deactivateUser, changeName, changeCode, changeRole } from '../services/api';
 import * as ui from '../components/ui';
 
 export default function Users() {
     const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+    const isOwner = currentUser.role === 'owner';
     const [users, setUsers] = useState([]);
     const [roles, setRoles] = useState([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
     const [confirmId, setConfirmId] = useState(null);
+    const [edit, setEdit] = useState(null); // { userId, field, value }
     const [form, setForm] = useState({
         full_name: '',
         username: '',
@@ -67,6 +69,31 @@ export default function Users() {
         }
     };
 
+    const startEdit = (userId, field, value) => {
+        setEdit({ userId, field, value: value || '' });
+        setError('');
+        setSuccess('');
+    };
+
+    const saveEdit = async () => {
+        const { userId, field, value } = edit;
+        setError('');
+        setSuccess('');
+        try {
+            let res;
+            if (field === 'name') res = await changeName(userId, { new_name: value.trim() });
+            else if (field === 'code') res = await changeCode(userId, { new_code: value.trim() });
+            else if (field === 'role') res = await changeRole(userId, { new_role_id: parseInt(value) });
+            setSuccess(res.data.message);
+            setEdit(null);
+            loadUsers();
+        } catch (err) {
+            setError(err.response?.data?.detail || 'Failed to update');
+        }
+    };
+
+    const editing = (userId, field) => edit && edit.userId === userId && edit.field === field;
+
     return (
         <Layout>
             <div style={ui.card}>
@@ -122,17 +149,53 @@ export default function Users() {
                     <tbody>
                         {users.map(u => (
                             <tr key={u.user_id} style={ui.tr}>
-                                <td style={ui.td}>{u.full_name}</td>
+                                {/* NAME */}
+                                <td style={ui.td}>
+                                    {editing(u.user_id, 'name') ? (
+                                        <span style={styles.editWrap}>
+                                            <input value={edit.value} onChange={e => setEdit({ ...edit, value: e.target.value })} style={styles.editInput} />
+                                            <button onClick={saveEdit} style={styles.saveBtn}>Save</button>
+                                            <button onClick={() => setEdit(null)} style={styles.cancelBtn}>×</button>
+                                        </span>
+                                    ) : (
+                                        <span>{u.full_name}{isOwner && u.role !== 'owner' && <button onClick={() => startEdit(u.user_id, 'name', u.full_name)} style={styles.editLink}>edit</button>}</span>
+                                    )}
+                                </td>
                                 <td style={ui.td}>{u.username}</td>
-                                <td style={ui.td}>{u.employee_code || '-'}</td>
-                                <td style={{ ...ui.td, textTransform: 'capitalize' }}>{u.role}</td>
+                                {/* CODE */}
+                                <td style={ui.td}>
+                                    {editing(u.user_id, 'code') ? (
+                                        <span style={styles.editWrap}>
+                                            <input value={edit.value} onChange={e => setEdit({ ...edit, value: e.target.value })} style={styles.editInput} placeholder="EMP002" />
+                                            <button onClick={saveEdit} style={styles.saveBtn}>Save</button>
+                                            <button onClick={() => setEdit(null)} style={styles.cancelBtn}>×</button>
+                                        </span>
+                                    ) : (
+                                        <span>{u.employee_code || '-'}{isOwner && u.role !== 'owner' && <button onClick={() => startEdit(u.user_id, 'code', u.employee_code)} style={styles.editLink}>edit</button>}</span>
+                                    )}
+                                </td>
+                                {/* ROLE */}
+                                <td style={{ ...ui.td, textTransform: 'capitalize' }}>
+                                    {editing(u.user_id, 'role') ? (
+                                        <span style={styles.editWrap}>
+                                            <select value={edit.value} onChange={e => setEdit({ ...edit, value: e.target.value })} style={styles.editInput}>
+                                                {roles.filter(r => r.name !== 'owner').map(r => <option key={r.role_id} value={r.role_id}>{r.name}</option>)}
+                                            </select>
+                                            <button onClick={saveEdit} style={styles.saveBtn}>Save</button>
+                                            <button onClick={() => setEdit(null)} style={styles.cancelBtn}>×</button>
+                                        </span>
+                                    ) : (
+                                        <span>{u.role}{isOwner && u.role !== 'owner' && <button onClick={() => { const rid = roles.find(r => r.name === u.role)?.role_id; startEdit(u.user_id, 'role', rid); }} style={styles.editLink}>edit</button>}</span>
+                                    )}
+                                </td>
+                                {/* REMOVE */}
                                 <td style={{ ...ui.td, textAlign: 'right' }}>
                                     {u.role === 'owner' || u.user_id === currentUser.user_id ? (
                                         <span style={{ color: ui.colors.muted, fontSize: '12px' }}>—</span>
                                     ) : confirmId === u.user_id ? (
-                                        <span style={styles.confirmWrap}>
+                                        <span style={styles.editWrap}>
                                             <button onClick={() => handleRemove(u.user_id)} style={styles.confirmYes}>Confirm</button>
-                                            <button onClick={() => setConfirmId(null)} style={styles.confirmNo}>Cancel</button>
+                                            <button onClick={() => setConfirmId(null)} style={styles.cancelBtn}>Cancel</button>
                                         </span>
                                     ) : (
                                         <button onClick={() => setConfirmId(u.user_id)} style={styles.removeBtn}>Remove</button>
@@ -149,7 +212,10 @@ export default function Users() {
 
 const styles = {
     removeBtn: { padding: '5px 12px', backgroundColor: '#fff', color: ui.colors.accent, border: `0.5px solid #f0c0c0`, borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: '500' },
-    confirmWrap: { display: 'inline-flex', gap: '6px' },
     confirmYes: { padding: '5px 12px', backgroundColor: ui.colors.accent, color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: '500' },
-    confirmNo: { padding: '5px 12px', backgroundColor: '#fff', color: ui.colors.inkSoft, border: `0.5px solid ${ui.colors.borderStrong}`, borderRadius: '6px', cursor: 'pointer', fontSize: '12px' },
+    editLink: { marginLeft: '8px', padding: '2px 8px', backgroundColor: 'transparent', color: ui.colors.muted, border: `0.5px solid ${ui.colors.border}`, borderRadius: '5px', cursor: 'pointer', fontSize: '11px' },
+    editWrap: { display: 'inline-flex', alignItems: 'center', gap: '6px' },
+    editInput: { padding: '5px 8px', border: `0.5px solid ${ui.colors.borderStrong}`, borderRadius: '6px', fontSize: '13px' },
+    saveBtn: { padding: '5px 12px', backgroundColor: ui.colors.accent, color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: '500' },
+    cancelBtn: { padding: '5px 9px', backgroundColor: '#fff', color: ui.colors.inkSoft, border: `0.5px solid ${ui.colors.borderStrong}`, borderRadius: '6px', cursor: 'pointer', fontSize: '12px' },
 };

@@ -1,0 +1,123 @@
+import React, { useState } from 'react';
+import Layout from '../components/Layout';
+import { changePassword, changeUsername } from '../services/api';
+import * as ui from '../components/ui';
+
+export default function Account() {
+    const user = JSON.parse(localStorage.getItem('user') || '{}');
+
+    const [pwForm, setPwForm] = useState({ old_password: '', new_password: '', confirm: '' });
+    const [pwLoading, setPwLoading] = useState(false);
+    const [pwError, setPwError] = useState('');
+    const [pwSuccess, setPwSuccess] = useState('');
+
+    const [newUsername, setNewUsername] = useState('');
+    const [unLoading, setUnLoading] = useState(false);
+    const [unError, setUnError] = useState('');
+    const [unSuccess, setUnSuccess] = useState('');
+
+    const handlePwChange = (e) => {
+        const { name, value } = e.target;
+        setPwForm(f => ({ ...f, [name]: value }));
+    };
+
+    const submitPassword = async (e) => {
+        e.preventDefault();
+        setPwError('');
+        setPwSuccess('');
+        if (pwForm.new_password !== pwForm.confirm) {
+            setPwError('New passwords do not match');
+            return;
+        }
+        setPwLoading(true);
+        try {
+            await changePassword({ old_password: pwForm.old_password, new_password: pwForm.new_password });
+            setPwSuccess('Password changed successfully');
+            setPwForm({ old_password: '', new_password: '', confirm: '' });
+        } catch (err) {
+            setPwError(err.response?.data?.detail || 'Failed to change password');
+        } finally {
+            setPwLoading(false);
+        }
+    };
+
+    const submitUsername = async (e) => {
+        e.preventDefault();
+        setUnError('');
+        setUnSuccess('');
+        setUnLoading(true);
+        try {
+            const res = await changeUsername({ new_username: newUsername });
+            setUnSuccess(res.data.message);
+            const updated = { ...user, username: res.data.new_username || newUsername };
+            localStorage.setItem('user', JSON.stringify(updated));
+            setNewUsername('');
+        } catch (err) {
+            setUnError(err.response?.data?.detail || 'Failed to change username');
+        } finally {
+            setUnLoading(false);
+        }
+    };
+
+    return (
+        <Layout>
+            <div style={styles.grid}>
+                <div style={{ ...ui.card, marginBottom: 0 }}>
+                    <div style={ui.cardTitle}>Account Details</div>
+                    <div style={styles.detailRow}><span style={styles.detailLabel}>Name</span><span style={styles.detailValue}>{user.full_name}</span></div>
+                    <div style={styles.detailRow}><span style={styles.detailLabel}>Role</span><span style={{ ...styles.detailValue, textTransform: 'capitalize' }}>{user.role}</span></div>
+                    {user.employee_code && <div style={styles.detailRow}><span style={styles.detailLabel}>Employee Code</span><span style={styles.detailValue}>{user.employee_code}</span></div>}
+                </div>
+
+                <div style={{ ...ui.card, marginBottom: 0 }}>
+                    <div style={ui.cardTitle}>Change Username</div>
+                    {unError && <div style={ui.alertError}>{unError}</div>}
+                    {unSuccess && <div style={ui.alertSuccess}>{unSuccess}</div>}
+                    {user.role !== 'owner' && (
+                        <div style={styles.note}>You can change your username once every 7 days.</div>
+                    )}
+                    <form onSubmit={submitUsername}>
+                        <div style={ui.field}>
+                            <label style={ui.label}>New Username</label>
+                            <input style={ui.input} type="text" value={newUsername} onChange={e => setNewUsername(e.target.value)} required />
+                        </div>
+                        <button style={unLoading ? ui.btnDisabled : ui.btn} type="submit" disabled={unLoading}>
+                            {unLoading ? 'Updating...' : 'Update Username'}
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <div style={{ ...ui.card, maxWidth: '460px', marginTop: '20px' }}>
+                <div style={ui.cardTitle}>Change Password</div>
+                {pwError && <div style={ui.alertError}>{pwError}</div>}
+                {pwSuccess && <div style={ui.alertSuccess}>{pwSuccess}</div>}
+                <form onSubmit={submitPassword}>
+                    <div style={ui.field}>
+                        <label style={ui.label}>Current Password</label>
+                        <input style={ui.input} type="password" name="old_password" value={pwForm.old_password} onChange={handlePwChange} required />
+                    </div>
+                    <div style={ui.field}>
+                        <label style={ui.label}>New Password</label>
+                        <input style={ui.input} type="password" name="new_password" value={pwForm.new_password} onChange={handlePwChange} required />
+                    </div>
+                    <div style={ui.field}>
+                        <label style={ui.label}>Confirm New Password</label>
+                        <input style={ui.input} type="password" name="confirm" value={pwForm.confirm} onChange={handlePwChange} required />
+                    </div>
+                    <button style={pwLoading ? ui.btnDisabled : ui.btn} type="submit" disabled={pwLoading}>
+                        {pwLoading ? 'Changing...' : 'Change Password'}
+                    </button>
+                </form>
+            </div>
+        </Layout>
+    );
+}
+
+const styles = {
+    grid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' },
+    detailRow: { display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: `0.5px solid ${ui.colors.border}` },
+    detailLabel: { fontSize: '13px', color: ui.colors.muted },
+    detailValue: { fontSize: '13px', color: ui.colors.ink, fontWeight: '500' },
+    note: { fontSize: '12px', color: ui.colors.muted, marginBottom: '14px' },
+};

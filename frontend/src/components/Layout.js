@@ -9,7 +9,7 @@ export default function Layout({ children }) {
     const isAdmin = user.role === 'owner' || user.role === 'manager';
 
     const logout = () => {
-        localStorage.clear();   
+        localStorage.clear();
         navigate('/login');
     };
 
@@ -52,9 +52,9 @@ export default function Layout({ children }) {
                     })}
                 </nav>
                 <div style={styles.sidebarFooter}>
-                    <div onClick={() => navigate('/change-password')} style={styles.navItem}>
+                    <div onClick={() => navigate('/account')} style={styles.navItem}>
                         <span style={styles.navIcon}>⚿</span>
-                        Password
+                        My Account
                     </div>
                 </div>
             </aside>
@@ -63,7 +63,7 @@ export default function Layout({ children }) {
                 <header style={styles.topbar}>
                     <div style={styles.pageTitle}>
                         {navItems.find(n => n.path === location.pathname)?.label ||
-                         (location.pathname === '/change-password' ? 'Change Password' : '')}
+                         (location.pathname === '/account' ? 'My Account' : '')}
                     </div>
                     <div style={styles.userArea}>
                         <div style={styles.userDetails}>

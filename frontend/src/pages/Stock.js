@@ -1,15 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import Layout from '../components/Layout';
-import { getParts, getCurrentStock, createStockTxn, getMachines } from '../services/api';
+import { getParts, getCurrentStock, getStockHistory, createStockTxn, deleteStockTxn, getMachines } from '../services/api';
 import * as ui from '../components/ui';
 
 export default function Stock() {
     const [parts, setParts] = useState([]);
     const [machines, setMachines] = useState([]);
     const [stock, setStock] = useState([]);
+    const [history, setHistory] = useState([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
+    const [confirmId, setConfirmId] = useState(null);
     const [form, setForm] = useState({
         part_id: '',
         txn_date: new Date().toISOString().split('T')[0],
@@ -24,6 +26,7 @@ export default function Stock() {
         loadParts();
         loadMachines();
         loadStock();
+        loadHistory();
     }, []);
 
     const loadParts = async () => {
@@ -34,6 +37,9 @@ export default function Stock() {
     };
     const loadStock = async () => {
         try { const res = await getCurrentStock(); setStock(res.data); } catch (e) { console.error(e); }
+    };
+    const loadHistory = async () => {
+        try { const res = await getStockHistory(); setHistory(res.data); } catch (e) { console.error(e); }
     };
 
     const handleChange = (e) => {
@@ -61,10 +67,26 @@ export default function Stock() {
             setSuccess(form.direction === 'IN' ? 'Stock received' : 'Part issued');
             setForm(f => ({ ...f, part_id: '', quantity: '', unit_price: '', machine_id: '', notes: '' }));
             loadStock();
+            loadHistory();
         } catch (err) {
             setError(err.response?.data?.detail || 'Failed to save transaction');
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleDelete = async (id) => {
+        setError('');
+        setSuccess('');
+        try {
+            const res = await deleteStockTxn(id);
+            setSuccess(res.data.message);
+            setConfirmId(null);
+            loadStock();
+            loadHistory();
+        } catch (err) {
+            setError(err.response?.data?.detail || 'Failed to delete');
+            setConfirmId(null);
         }
     };
 
@@ -133,10 +155,7 @@ export default function Stock() {
                 <div style={ui.cardTitle}>Current Stock</div>
                 <table style={ui.table}>
                     <thead>
-                        <tr>
-                            <th style={ui.th}>Part</th>
-                            <th style={ui.th}>Available</th>
-                        </tr>
+                        <tr><th style={ui.th}>Part</th><th style={ui.th}>Available</th></tr>
                     </thead>
                     <tbody>
                         {stock.map(s => {
@@ -157,6 +176,44 @@ export default function Stock() {
                     </tbody>
                 </table>
             </div>
+
+            <div style={ui.card}>
+                <div style={ui.cardTitle}>Recent Transactions</div>
+                <table style={ui.table}>
+                    <thead>
+                        <tr>
+                            <th style={ui.th}>Date</th>
+                            <th style={ui.th}>Part</th>
+                            <th style={ui.th}>Direction</th>
+                            <th style={ui.th}>Qty</th>
+                            <th style={ui.th}></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {history.map(h => (
+                            <tr key={h.stock_txn_id} style={ui.tr}>
+                                <td style={ui.td}>{h.date}</td>
+                                <td style={ui.td}>{h.part}</td>
+                                <td style={ui.td}>{h.direction}</td>
+                                <td style={ui.td}>{h.quantity}</td>
+                                <td style={{ ...ui.td, textAlign: 'right' }}>
+                                    {confirmId === h.stock_txn_id ? (
+                                        <span style={styles.confirmWrap}>
+                                            <button onClick={() => handleDelete(h.stock_txn_id)} style={styles.confirmYes}>Delete</button>
+                                            <button onClick={() => setConfirmId(null)} style={styles.confirmNo}>Cancel</button>
+                                        </span>
+                                    ) : (
+                                        <button onClick={() => setConfirmId(h.stock_txn_id)} style={styles.delBtn}>Delete</button>
+                                    )}
+                                </td>
+                            </tr>
+                        ))}
+                        {history.length === 0 && (
+                            <tr><td colSpan="5" style={{ ...ui.td, textAlign: 'center', color: ui.colors.muted, padding: '24px' }}>No transactions yet</td></tr>
+                        )}
+                    </tbody>
+                </table>
+            </div>
         </Layout>
     );
 }
@@ -164,4 +221,8 @@ export default function Stock() {
 const styles = {
     lowBadge: { fontSize: '13px', fontWeight: '500', color: ui.colors.accent, backgroundColor: ui.colors.accentSoft, padding: '2px 10px', borderRadius: '20px' },
     okText: { fontSize: '14px', color: ui.colors.ink },
+    delBtn: { padding: '5px 12px', backgroundColor: '#fff', color: ui.colors.accent, border: `0.5px solid #f0c0c0`, borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: '500' },
+    confirmWrap: { display: 'inline-flex', gap: '6px' },
+    confirmYes: { padding: '5px 12px', backgroundColor: ui.colors.accent, color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: '500' },
+    confirmNo: { padding: '5px 12px', backgroundColor: '#fff', color: ui.colors.inkSoft, border: `0.5px solid ${ui.colors.borderStrong}`, borderRadius: '6px', cursor: 'pointer', fontSize: '12px' },
 };

@@ -1,9 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
-from datetime import date
+from datetime import date, datetime
 from app.database import get_db
-from app.models.expenses import Expense  # reusing patterns
 from app.models.mainbook import MainbookTransaction
 from app.models.locations import Location
 from app.models.audit import AuditLog
@@ -44,14 +43,13 @@ def create_transaction(
     db.add(txn)
     db.flush()
 
-    audit = AuditLog(
+    db.add(AuditLog(
         table_name="mainbook_transactions",
         record_id=txn.transaction_id,
         action="CREATE",
         new_value=f"debit={data.debit} credit={data.credit} desc={data.description}",
         changed_by=current_user.user_id,
-    )
-    db.add(audit)
+    ))
     db.commit()
     db.refresh(txn)
     return txn
@@ -72,3 +70,30 @@ def list_transactions(
     if to_date:
         query = query.filter(MainbookTransaction.txn_date <= to_date)
     return query.order_by(MainbookTransaction.txn_date, MainbookTransaction.transaction_id).offset(skip).limit(limit).all()
+
+
+@router.delete("/{transaction_id}")
+def delete_transaction(
+    transaction_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    txn = db.query(MainbookTransaction).filter(
+        MainbookTransaction.transaction_id == transaction_id,
+        MainbookTransaction.deleted_at == None
+    ).first()
+    if not txn:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+
+    txn.deleted_at = datetime.utcnow()
+    txn.deleted_by = current_user.user_id
+
+    db.add(AuditLog(
+        table_name="mainbook_transactions",
+        record_id=txn.transaction_id,
+        action="DELETE",
+        old_value=f"debit={txn.debit} credit={txn.credit} desc={txn.description}",
+        changed_by=current_user.user_id,
+    ))
+    db.commit()
+    return {"message": "Entry deleted", "deleted_by": current_user.full_name}

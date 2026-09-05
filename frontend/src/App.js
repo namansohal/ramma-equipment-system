@@ -5,7 +5,7 @@ import Dashboard from './pages/Dashboard';
 import Expenses from './pages/Expenses';
 import Stock from './pages/Stock';
 import Users from './pages/Users';
-import ChangePassword from './pages/ChangePassword';
+import Account from './pages/Account';
 import Machines from './pages/Machines';
 import MachineDetail from './pages/MachineDetail';
 import Downtime from './pages/Downtime';
@@ -31,7 +31,7 @@ export default function App() {
                 <Route path="/downtime" element={<PrivateRoute><Downtime /></PrivateRoute>} />
                 <Route path="/reports" element={<PrivateRoute><Reports /></PrivateRoute>} />
                 <Route path="/users" element={<PrivateRoute><Users /></PrivateRoute>} />
-                <Route path="/change-password" element={<PrivateRoute><ChangePassword /></PrivateRoute>} />
+                <Route path="/account" element={<PrivateRoute><Account /></PrivateRoute>} />
                 <Route path="*" element={<Navigate to="/login" />} />
             </Routes>
         </BrowserRouter>
