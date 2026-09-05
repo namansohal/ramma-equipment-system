@@ -1,14 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import Layout from '../components/Layout';
-import { getUsers, createUser, getRoles } from '../services/api';
+import { getUsers, createUser, getRoles, deactivateUser } from '../services/api';
 import * as ui from '../components/ui';
 
 export default function Users() {
+    const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
     const [users, setUsers] = useState([]);
     const [roles, setRoles] = useState([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
+    const [confirmId, setConfirmId] = useState(null);
     const [form, setForm] = useState({
         full_name: '',
         username: '',
@@ -48,6 +50,20 @@ export default function Users() {
             setError(err.response?.data?.detail || 'Failed to create employee');
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleRemove = async (userId) => {
+        setError('');
+        setSuccess('');
+        try {
+            const res = await deactivateUser(userId);
+            setSuccess(res.data.message);
+            setConfirmId(null);
+            loadUsers();
+        } catch (err) {
+            setError(err.response?.data?.detail || 'Failed to remove employee');
+            setConfirmId(null);
         }
     };
 
@@ -100,6 +116,7 @@ export default function Users() {
                             <th style={ui.th}>Username</th>
                             <th style={ui.th}>Code</th>
                             <th style={ui.th}>Role</th>
+                            <th style={ui.th}></th>
                         </tr>
                     </thead>
                     <tbody>
@@ -109,6 +126,18 @@ export default function Users() {
                                 <td style={ui.td}>{u.username}</td>
                                 <td style={ui.td}>{u.employee_code || '-'}</td>
                                 <td style={{ ...ui.td, textTransform: 'capitalize' }}>{u.role}</td>
+                                <td style={{ ...ui.td, textAlign: 'right' }}>
+                                    {u.role === 'owner' || u.user_id === currentUser.user_id ? (
+                                        <span style={{ color: ui.colors.muted, fontSize: '12px' }}>—</span>
+                                    ) : confirmId === u.user_id ? (
+                                        <span style={styles.confirmWrap}>
+                                            <button onClick={() => handleRemove(u.user_id)} style={styles.confirmYes}>Confirm</button>
+                                            <button onClick={() => setConfirmId(null)} style={styles.confirmNo}>Cancel</button>
+                                        </span>
+                                    ) : (
+                                        <button onClick={() => setConfirmId(u.user_id)} style={styles.removeBtn}>Remove</button>
+                                    )}
+                                </td>
                             </tr>
                         ))}
                     </tbody>
@@ -117,3 +146,10 @@ export default function Users() {
         </Layout>
     );
 }
+
+const styles = {
+    removeBtn: { padding: '5px 12px', backgroundColor: '#fff', color: ui.colors.accent, border: `0.5px solid #f0c0c0`, borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: '500' },
+    confirmWrap: { display: 'inline-flex', gap: '6px' },
+    confirmYes: { padding: '5px 12px', backgroundColor: ui.colors.accent, color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: '500' },
+    confirmNo: { padding: '5px 12px', backgroundColor: '#fff', color: ui.colors.inkSoft, border: `0.5px solid ${ui.colors.borderStrong}`, borderRadius: '6px', cursor: 'pointer', fontSize: '12px' },
+};

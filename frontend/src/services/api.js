@@ -12,7 +12,6 @@ API.interceptors.request.use((config) => {
     return config;
 });
 
-// Auth
 export const login = (username, password) => {
     const form = new URLSearchParams();
     form.append('username', username);
@@ -20,21 +19,20 @@ export const login = (username, password) => {
     return API.post('/auth/login', form);
 };
 
-// Expenses
 export const getExpenses = (params) => API.get('/expenses/', { params });
 export const createExpense = (data) => API.post('/expenses/', data);
 export const getExpenseTypes = () => API.get('/expenses/types');
 
-// Stock
 export const getParts = () => API.get('/stock/parts');
 export const getCurrentStock = () => API.get('/stock/current');
 export const createStockTxn = (data) => API.post('/stock/', data);
 
-// Machines
 export const getMachines = () => API.get('/machines/');
 
-// Users
 export const getUsers = () => API.get('/users/');
 export const createUser = (data) => API.post('/users/', data);
+export const deactivateUser = (userId) => API.delete(`/users/${userId}`);
 export const getRoles = () => API.get('/users/roles');
 export const changePassword = (data) => API.post('/users/change-password', data);
+
+export default API;

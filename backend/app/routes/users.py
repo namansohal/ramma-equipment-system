@@ -76,6 +76,37 @@ def create_user(
     }
 
 
+@router.delete("/{user_id}")
+def deactivate_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_owner_or_manager)
+):
+    user = db.query(User).filter(User.user_id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Employee not found")
+
+    if user.user_id == current_user.user_id:
+        raise HTTPException(status_code=400, detail="You cannot deactivate your own account")
+
+    if user.role.name == "owner":
+        raise HTTPException(status_code=400, detail="The owner account cannot be deactivated")
+
+    user.active = False
+
+    audit = AuditLog(
+        table_name="users",
+        record_id=user.user_id,
+        action="DELETE",
+        old_value=f"username={user.username} active=True",
+        new_value="active=False",
+        changed_by=current_user.user_id,
+    )
+    db.add(audit)
+    db.commit()
+    return {"message": f"Employee {user.full_name} has been deactivated"}
+
+
 @router.get("/roles")
 def list_roles(
     db: Session = Depends(get_db),
