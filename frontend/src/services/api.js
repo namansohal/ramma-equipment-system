@@ -46,6 +46,16 @@ export const getDowntime = (params) => API.get('/downtime/', { params });
 export const createDowntime = (data) => API.post('/downtime/', data);
 export const endDowntime = (id, data) => API.patch(`/downtime/${id}/end`, data);
 
+export const getBorrowers = () => API.get('/loans/borrowers');
+export const getLoans = () => API.get('/loans/');
+export const createLoan = (data) => API.post('/loans/', data);
+export const repayLoan = (id, data) => API.post(`/loans/${id}/repay`, data);
+
+export const getStaff = () => API.get('/staff/');
+export const createStaff = (data) => API.post('/staff/', data);
+export const updateStaff = (id, data) => API.patch(`/staff/${id}`, data);
+export const removeStaff = (id) => API.delete(`/staff/${id}`);
+
 export const currentUser = () => JSON.parse(localStorage.getItem('user') || '{}');
 export const isViewer = () => currentUser().role === 'viewer';
 export const isAdmin = () => ['owner', 'manager'].includes(currentUser().role);
