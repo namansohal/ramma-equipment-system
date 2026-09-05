@@ -21,6 +21,7 @@ export const login = (username, password) => {
 
 export const getExpenses = (params) => API.get('/expenses/', { params });
 export const createExpense = (data) => API.post('/expenses/', data);
+export const deleteExpense = (id) => API.delete(`/expenses/${id}`);
 export const getExpenseTypes = () => API.get('/expenses/types');
 
 export const getParts = () => API.get('/stock/parts');

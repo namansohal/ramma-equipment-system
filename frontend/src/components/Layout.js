@@ -20,6 +20,7 @@ export default function Layout({ children }) {
         { path: '/stock', label: 'Spare Parts', icon: '⚙' },
         { path: '/machines', label: 'Machines', icon: '⬢' },
         { path: '/downtime', label: 'Downtime', icon: '◔' },
+        { path: '/reports', label: 'Reports', icon: '▤' },
     ];
     if (isAdmin) {
         navItems.push({ path: '/users', label: 'Employees', icon: '◈' });

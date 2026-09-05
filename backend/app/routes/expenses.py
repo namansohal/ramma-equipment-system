@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
-from datetime import date
+from datetime import date, datetime
 from app.database import get_db
 from app.models.expenses import Expense, ExpenseMachineLink, ExpenseType
 from app.models.locations import Location
@@ -48,20 +48,15 @@ def create_expense(
     db.flush()
 
     for machine_id in data.machine_ids:
-        link = ExpenseMachineLink(
-            expense_id=expense.expense_id,
-            machine_id=machine_id
-        )
-        db.add(link)
+        db.add(ExpenseMachineLink(expense_id=expense.expense_id, machine_id=machine_id))
 
-    audit = AuditLog(
+    db.add(AuditLog(
         table_name="expenses",
         record_id=expense.expense_id,
         action="CREATE",
         new_value=f"debit={data.debit} credit={data.credit} desc={data.description}",
         changed_by=current_user.user_id,
-    )
-    db.add(audit)
+    ))
     db.commit()
     db.refresh(expense)
     return expense
@@ -77,13 +72,35 @@ def get_expenses(
     current_user: User = Depends(get_current_user)
 ):
     query = db.query(Expense).filter(Expense.deleted_at == None)
-
     if from_date:
         query = query.filter(Expense.txn_date >= from_date)
     if to_date:
         query = query.filter(Expense.txn_date <= to_date)
-
     return query.order_by(Expense.txn_date, Expense.expense_id).offset(skip).limit(limit).all()
+
+
+@router.delete("/{expense_id}")
+def delete_expense(
+    expense_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    expense = db.query(Expense).filter(Expense.expense_id == expense_id, Expense.deleted_at == None).first()
+    if not expense:
+        raise HTTPException(status_code=404, detail="Expense not found")
+
+    expense.deleted_at = datetime.utcnow()
+    expense.deleted_by = current_user.user_id
+
+    db.add(AuditLog(
+        table_name="expenses",
+        record_id=expense.expense_id,
+        action="DELETE",
+        old_value=f"debit={expense.debit} credit={expense.credit} desc={expense.description}",
+        changed_by=current_user.user_id,
+    ))
+    db.commit()
+    return {"message": "Expense deleted", "deleted_by": current_user.full_name}
 
 
 @router.get("/types")
@@ -92,7 +109,4 @@ def get_expense_types(
     current_user: User = Depends(get_current_user)
 ):
     types = db.query(ExpenseType).all()
-    return [
-        {"type_id": t.type_id, "code": t.code, "label": t.label}
-        for t in types
-    ]
+    return [{"type_id": t.type_id, "code": t.code, "label": t.label} for t in types]

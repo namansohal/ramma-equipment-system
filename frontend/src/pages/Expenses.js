@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import Layout from '../components/Layout';
-import { createExpense, getExpenses, getExpenseTypes, getMachines } from '../services/api';
+import { createExpense, getExpenses, getExpenseTypes, getMachines, deleteExpense } from '../services/api';
 import * as ui from '../components/ui';
 
 export default function Expenses() {
@@ -10,6 +10,7 @@ export default function Expenses() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
+    const [confirmId, setConfirmId] = useState(null);
     const [form, setForm] = useState({
         txn_date: new Date().toISOString().split('T')[0],
         description: '',
@@ -72,6 +73,20 @@ export default function Expenses() {
         }
     };
 
+    const handleDelete = async (id) => {
+        setError('');
+        setSuccess('');
+        try {
+            const res = await deleteExpense(id);
+            setSuccess(res.data.message);
+            setConfirmId(null);
+            loadExpenses();
+        } catch (err) {
+            setError(err.response?.data?.detail || 'Failed to delete');
+            setConfirmId(null);
+        }
+    };
+
     return (
         <Layout>
             <div style={ui.card}>
@@ -114,11 +129,11 @@ export default function Expenses() {
 
                     <div style={ui.row2}>
                         <div style={ui.field}>
-                            <label style={ui.label}>Debit (GHS)</label>
+                            <label style={ui.label}>Money Out / Debit (GHS)</label>
                             <input style={ui.input} type="number" name="debit" value={form.debit} onChange={handleChange} min="0" step="0.01" />
                         </div>
                         <div style={ui.field}>
-                            <label style={ui.label}>Credit (GHS)</label>
+                            <label style={ui.label}>Money In / Credit (GHS)</label>
                             <input style={ui.input} type="number" name="credit" value={form.credit} onChange={handleChange} min="0" step="0.01" />
                         </div>
                     </div>
@@ -136,9 +151,10 @@ export default function Expenses() {
                         <tr>
                             <th style={ui.th}>Date</th>
                             <th style={ui.th}>Description</th>
-                            <th style={ui.th}>Debit</th>
-                            <th style={ui.th}>Credit</th>
+                            <th style={ui.th}>Out</th>
+                            <th style={ui.th}>In</th>
                             <th style={ui.th}>Balance</th>
+                            <th style={ui.th}></th>
                         </tr>
                     </thead>
                     <tbody>
@@ -149,10 +165,20 @@ export default function Expenses() {
                                 <td style={ui.td}>{e.debit ? parseFloat(e.debit).toLocaleString() : '-'}</td>
                                 <td style={ui.td}>{e.credit ? parseFloat(e.credit).toLocaleString() : '-'}</td>
                                 <td style={ui.td}>{e.balance ? parseFloat(e.balance).toLocaleString() : '-'}</td>
+                                <td style={{ ...ui.td, textAlign: 'right' }}>
+                                    {confirmId === e.expense_id ? (
+                                        <span style={styles.confirmWrap}>
+                                            <button onClick={() => handleDelete(e.expense_id)} style={styles.confirmYes}>Delete</button>
+                                            <button onClick={() => setConfirmId(null)} style={styles.confirmNo}>Cancel</button>
+                                        </span>
+                                    ) : (
+                                        <button onClick={() => setConfirmId(e.expense_id)} style={styles.delBtn}>Delete</button>
+                                    )}
+                                </td>
                             </tr>
                         ))}
                         {expenses.length === 0 && (
-                            <tr><td colSpan="5" style={{ ...ui.td, textAlign: 'center', color: ui.colors.muted, padding: '24px' }}>No expenses yet</td></tr>
+                            <tr><td colSpan="6" style={{ ...ui.td, textAlign: 'center', color: ui.colors.muted, padding: '24px' }}>No expenses yet</td></tr>
                         )}
                     </tbody>
                 </table>
@@ -165,4 +191,8 @@ const styles = {
     chipRow: { display: 'flex', flexWrap: 'wrap', gap: '8px' },
     chip: { padding: '8px 16px', border: `0.5px solid ${ui.colors.borderStrong}`, borderRadius: '8px', cursor: 'pointer', backgroundColor: '#fff', userSelect: 'none', fontSize: '13px', color: ui.colors.ink },
     chipActive: { padding: '8px 16px', border: `0.5px solid ${ui.colors.accent}`, borderRadius: '8px', cursor: 'pointer', backgroundColor: ui.colors.accentSoft, color: ui.colors.accent, userSelect: 'none', fontSize: '13px', fontWeight: '500' },
+    delBtn: { padding: '5px 12px', backgroundColor: '#fff', color: ui.colors.accent, border: `0.5px solid #f0c0c0`, borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: '500' },
+    confirmWrap: { display: 'inline-flex', gap: '6px' },
+    confirmYes: { padding: '5px 12px', backgroundColor: ui.colors.accent, color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: '500' },
+    confirmNo: { padding: '5px 12px', backgroundColor: '#fff', color: ui.colors.inkSoft, border: `0.5px solid ${ui.colors.borderStrong}`, borderRadius: '6px', cursor: 'pointer', fontSize: '12px' },
 };
