@@ -17,6 +17,7 @@ export default function Layout({ children }) {
         { path: '/dashboard', label: 'Dashboard', icon: '▦' },
         { path: '/mainbook', label: 'Mainbook', icon: '❐' },
         { path: '/expenses', label: 'Expenses', icon: '₵' },
+        { path: '/alerts', label: 'Alerts', icon: '⚠' },
         { path: '/stock', label: 'Spare Parts', icon: '⚙' },
         { path: '/loans', label: 'Loans', icon: '◎' },
         { path: '/machines', label: 'Machines', icon: '⬢' },

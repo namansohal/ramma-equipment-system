@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import Layout from '../components/Layout';
 import PartPicker from '../components/PartPicker';
 import ChipSelect from '../components/ChipSelect';
-import { getParts, getCurrentStock, getStockHistory, createStockTxn, deleteStockTxn, purchaseSparePart, getMachines, isViewer } from '../services/api';
+import { getParts, getCurrentStock, getStockHistory, createStockTxn, deleteStockTxn, purchaseSparePart, getPurchaseHistory, getMachines, isViewer } from '../services/api';
 import * as ui from '../components/ui';
 
 export default function Stock() {
@@ -16,6 +16,7 @@ export default function Stock() {
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
     const [confirmId, setConfirmId] = useState(null);
+    const [priceHistory, setPriceHistory] = useState(null);
 
     const [issueForm, setIssueForm] = useState({
         part_id: '', txn_date: new Date().toISOString().split('T')[0],
@@ -36,6 +37,17 @@ export default function Stock() {
     const loadHistory = async () => { try { const r = await getStockHistory(); setHistory(r.data); } catch (e) { console.error(e); } };
 
     const refreshAll = () => { loadStock(); loadHistory(); };
+
+    const handleBuyPartChange = async (partId) => {
+        setBuyForm(f => ({ ...f, part_id: partId }));
+        setPriceHistory(null);
+        if (partId) {
+            try {
+                const res = await getPurchaseHistory(partId);
+                setPriceHistory(res.data);
+            } catch (e) { console.error(e); }
+        }
+    };
 
     const submitIssue = async (e) => {
         e.preventDefault();
@@ -71,8 +83,13 @@ export default function Stock() {
                 supplier: buyForm.supplier || null,
                 notes: buyForm.notes || null,
             });
-            setSuccess(res.data.message);
+            if (res.data.overpaid) {
+                setSuccess(`${res.data.message} ⚠ ${res.data.overpay_warning}`);
+            } else {
+                setSuccess(res.data.message);
+            }
             setBuyForm(f => ({ ...f, part_id: '', quantity: '', unit_price: '', supplier: '', notes: '' }));
+            setPriceHistory(null);
             refreshAll();
         } catch (err) {
             setError(err.response?.data?.detail || 'Failed to record purchase');
@@ -94,6 +111,8 @@ export default function Stock() {
 
     const buyTotal = (parseFloat(buyForm.quantity) || 0) * (parseFloat(buyForm.unit_price) || 0);
     const machineOptions = machines.map(m => ({ value: m.machine_id, label: m.code }));
+    const enteredPrice = parseFloat(buyForm.unit_price) || 0;
+    const showPriceWarning = priceHistory && priceHistory.lowest_price !== null && enteredPrice > priceHistory.lowest_price;
 
     return (
         <Layout>
@@ -139,8 +158,31 @@ export default function Stock() {
                             <div style={styles.hint}>Enter the price of ONE item — the total is calculated automatically. This adds stock AND records the expense.</div>
                             <div style={ui.field}>
                                 <label style={ui.label}>Part</label>
-                                <PartPicker parts={parts} value={buyForm.part_id ? parseInt(buyForm.part_id) : ''} onChange={(id) => setBuyForm(f => ({ ...f, part_id: id }))} />
+                                <PartPicker parts={parts} value={buyForm.part_id ? parseInt(buyForm.part_id) : ''} onChange={handleBuyPartChange} />
                             </div>
+
+                            {priceHistory && (
+                                <div style={styles.historyBox}>
+                                    {priceHistory.lowest_price !== null ? (
+                                        <>
+                                            <div style={styles.historyTitle}>Price history for this part</div>
+                                            <div style={styles.historyLowest}>Lowest ever paid: ₵{priceHistory.lowest_price.toLocaleString()}/unit</div>
+                                            <div style={styles.historyList}>
+                                                {priceHistory.history.slice(0, 5).map((h, i) => (
+                                                    <div key={i} style={styles.historyRow}>
+                                                        <span>{h.date}</span>
+                                                        <span>₵{h.unit_price.toLocaleString()}/unit</span>
+                                                        <span>{h.quantity} units</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <div style={styles.historyTitle}>No price history yet for this part — this will be the first recorded price.</div>
+                                    )}
+                                </div>
+                            )}
+
                             <div style={ui.row2}>
                                 <div style={ui.field}>
                                     <label style={ui.label}>Quantity Bought</label>
@@ -151,6 +193,13 @@ export default function Stock() {
                                     <input style={ui.input} type="number" value={buyForm.unit_price} onChange={e => setBuyForm(f => ({ ...f, unit_price: e.target.value }))} min="0" step="0.01" required />
                                 </div>
                             </div>
+
+                            {showPriceWarning && (
+                                <div style={styles.warnBox}>
+                                    ⚠ This is ₵{(enteredPrice - priceHistory.lowest_price).toFixed(2)} above the lowest price ever paid (₵{priceHistory.lowest_price}/unit). This will be reported to management.
+                                </div>
+                            )}
+
                             {buyTotal > 0 && (
                                 <div style={styles.totalHint}>Total: ₵{buyTotal.toLocaleString()}</div>
                             )}
@@ -246,4 +295,10 @@ const styles = {
     wrap: { display: 'inline-flex', gap: '6px' },
     yes: { padding: '5px 12px', backgroundColor: ui.colors.accent, color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: '500' },
     no: { padding: '5px 12px', backgroundColor: '#fff', color: ui.colors.inkSoft, border: `0.5px solid ${ui.colors.borderStrong}`, borderRadius: '6px', cursor: 'pointer', fontSize: '12px' },
+    historyBox: { backgroundColor: '#f5f3f0', border: `0.5px solid ${ui.colors.border}`, borderRadius: '8px', padding: '14px', marginBottom: '16px' },
+    historyTitle: { fontSize: '13px', fontWeight: '500', color: ui.colors.ink, marginBottom: '6px' },
+    historyLowest: { fontSize: '12px', color: ui.colors.inkSoft, marginBottom: '10px' },
+    historyList: { display: 'flex', flexDirection: 'column', gap: '4px' },
+    historyRow: { display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: ui.colors.muted },
+    warnBox: { backgroundColor: ui.colors.accentSoft, border: `0.5px solid #f0c0c0`, borderRadius: '8px', padding: '12px 14px', marginBottom: '16px', fontSize: '13px', color: ui.colors.accent, fontWeight: '500' },
 };

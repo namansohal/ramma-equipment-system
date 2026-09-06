@@ -21,7 +21,9 @@ export const login = (username, password) => {
 
 export const getExpenses = (params) => API.get('/expenses/', { params });
 export const createExpense = (data) => API.post('/expenses/', data);
+export const editExpense = (id, data) => API.patch(`/expenses/${id}`, data);
 export const deleteExpense = (id) => API.delete(`/expenses/${id}`);
+export const bulkDeleteExpenses = (ids) => API.delete('/expenses/bulk', { data: { ids } });
 export const getExpenseTypes = () => API.get('/expenses/types');
 
 export const getParts = () => API.get('/stock/parts');
@@ -31,6 +33,7 @@ export const createStockTxn = (data) => API.post('/stock/', data);
 export const deleteStockTxn = (id) => API.delete(`/stock/${id}`);
 
 export const purchaseSparePart = (data) => API.post('/purchases/spare-part', data);
+export const getPurchaseHistory = (partId) => API.get(`/purchases/history/${partId}`);
 
 export const getMachines = () => API.get('/machines/');
 
@@ -60,7 +63,14 @@ export const removeStaff = (id) => API.delete(`/staff/${id}`);
 
 export const getMainbook = (params) => API.get('/mainbook/', { params });
 export const createMainbook = (data) => API.post('/mainbook/', data);
+export const editMainbook = (id, data) => API.patch(`/mainbook/${id}`, data);
 export const deleteMainbook = (id) => API.delete(`/mainbook/${id}`);
+export const bulkDeleteMainbook = (ids) => API.delete('/mainbook/bulk', { data: { ids } });
+
+export const getAlerts = () => API.get('/alerts/');
+export const getUnreadAlertCount = () => API.get('/alerts/unread-count');
+export const markAlertRead = (id) => API.post(`/alerts/${id}/read`);
+export const deleteAlert = (id) => API.delete(`/alerts/${id}`);
 
 export const currentUser = () => JSON.parse(localStorage.getItem('user') || '{}');
 export const isViewer = () => currentUser().role === 'viewer';

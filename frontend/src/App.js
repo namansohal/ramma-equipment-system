@@ -14,6 +14,7 @@ import Reports from './pages/Reports';
 import Audit from './pages/Audit';
 import Loans from './pages/Loans';
 import Staff from './pages/Staff';
+import Alerts from './pages/Alerts';
 
 function PrivateRoute({ children }) {
     const token = localStorage.getItem('token');
@@ -36,6 +37,7 @@ export default function App() {
                 <Route path="/reports" element={<PrivateRoute><Reports /></PrivateRoute>} />
                 <Route path="/audit" element={<PrivateRoute><Audit /></PrivateRoute>} />
                 <Route path="/staff" element={<PrivateRoute><Staff /></PrivateRoute>} />
+                <Route path="/alerts" element={<PrivateRoute><Alerts /></PrivateRoute>} />
                 <Route path="/users" element={<PrivateRoute><Users /></PrivateRoute>} />
                 <Route path="/account" element={<PrivateRoute><Account /></PrivateRoute>} />
                 <Route path="*" element={<Navigate to="/login" />} />
