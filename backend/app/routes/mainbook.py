@@ -3,7 +3,6 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import date, datetime
 from pydantic import BaseModel
-from decimal import Decimal
 from app.database import get_db
 from app.models.mainbook import MainbookTransaction
 from app.models.expenses import Expense, ExpenseType
@@ -21,9 +20,10 @@ router = APIRouter(prefix="/mainbook", tags=["Mainbook"])
 class MainbookCreate(BaseModel):
     txn_date: date
     description: str
-    debit: Optional[float] = 0        # money out
-    credit: Optional[float] = 0       # money in
-    destination: Optional[str] = None  # 'expense' | 'refund' | 'momo' (only for money-out)
+    debit: Optional[float] = 0
+    credit: Optional[float] = 0
+    destination: Optional[str] = None       # 'expense' | 'refund' | 'momo' (money-out only)
+    machine_id: Optional[int] = None        # tag this money to a machine (income)
 
 
 def _current_location(db):
@@ -43,7 +43,6 @@ def create_transaction(
     debit = float(data.debit or 0)
     credit = float(data.credit or 0)
 
-    # If money is going out, a destination is required
     if debit > 0 and not data.destination:
         raise HTTPException(status_code=400, detail="Select where the money is going (Expense / Refund / MOMO)")
     if data.destination and data.destination not in ("expense", "refund", "momo"):
@@ -59,6 +58,8 @@ def create_transaction(
     desc = data.description
     if debit > 0 and data.destination:
         desc = f"{data.description} [{data.destination.upper()}]"
+    if data.machine_id and credit > 0:
+        desc = f"{data.description} [MACHINE INCOME]"
 
     txn = MainbookTransaction(
         location_id=location.location_id,
@@ -72,14 +73,14 @@ def create_transaction(
     db.add(txn)
     db.flush()
 
-    # If destination is expense book, auto-post a money-in row to Expenses
+    # money-out to expense book auto-posts as money-in on Expenses
     if debit > 0 and data.destination == "expense":
         last_exp = db.query(Expense).filter(
             Expense.location_id == location.location_id,
             Expense.deleted_at == None
         ).order_by(Expense.expense_id.desc()).first()
         exp_last_balance = last_exp.balance if last_exp else 0
-        exp_new_balance = float(exp_last_balance) + debit  # money coming IN to expense book
+        exp_new_balance = float(exp_last_balance) + debit
 
         cash_type = db.query(ExpenseType).filter(ExpenseType.code == "cash_receipt").first()
 
@@ -98,11 +99,21 @@ def create_transaction(
         db.flush()
         db.add(MainbookExpenseLink(transaction_id=txn.transaction_id, expense_id=exp.expense_id))
 
+    # money-in tagged to a machine → structurally link it as machine income
+    if credit > 0 and data.machine_id:
+        from app.models.machine_income import MachineIncome
+        db.add(MachineIncome(
+            machine_id=data.machine_id,
+            transaction_id=txn.transaction_id,
+            amount=credit,
+            txn_date=data.txn_date,
+        ))
+
     db.add(AuditLog(
         table_name="mainbook_transactions",
         record_id=txn.transaction_id,
         action="CREATE",
-        new_value=f"debit={debit} credit={credit} dest={data.destination or '-'} desc={data.description}",
+        new_value=f"debit={debit} credit={credit} dest={data.destination or '-'} machine={data.machine_id or '-'} desc={data.description}",
         changed_by=current_user.user_id,
     ))
     db.commit()
@@ -146,6 +157,9 @@ def delete_transaction(
 
     txn.deleted_at = datetime.utcnow()
     txn.deleted_by = current_user.user_id
+
+    from app.models.machine_income import MachineIncome
+    db.query(MachineIncome).filter(MachineIncome.transaction_id == transaction_id).delete()
 
     db.add(AuditLog(
         table_name="mainbook_transactions",

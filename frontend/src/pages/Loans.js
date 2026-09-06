@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import Layout from '../components/Layout';
+import StyledSelect from '../components/StyledSelect';
 import { getBorrowers, getLoans, createLoan, repayLoan, isViewer } from '../services/api';
 import * as ui from '../components/ui';
 
@@ -75,6 +76,8 @@ export default function Loans() {
         }
     };
 
+    const borrowerOptions = borrowers.map(b => ({ value: b.user_id, label: b.full_name }));
+
     return (
         <Layout>
             {!viewer && (
@@ -86,10 +89,7 @@ export default function Loans() {
                         <div style={ui.row2}>
                             <div style={ui.field}>
                                 <label style={ui.label}>Employee</label>
-                                <select style={ui.input} name="user_id" value={form.user_id} onChange={handleChange} required>
-                                    <option value="">Select employee</option>
-                                    {borrowers.map(b => <option key={b.user_id} value={b.user_id}>{b.full_name}</option>)}
-                                </select>
+                                <StyledSelect options={borrowerOptions} value={form.user_id} onChange={(v) => setForm(f => ({ ...f, user_id: v }))} placeholder="Select employee" />
                             </div>
                             <div style={ui.field}>
                                 <label style={ui.label}>Amount (GHS)</label>

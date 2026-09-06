@@ -20,7 +20,7 @@ router = APIRouter(prefix="/purchases", tags=["Purchases"])
 class PurchaseCreate(BaseModel):
     part_id: int
     quantity: float
-    amount: float                # total amount paid (money out)
+    unit_price: float             # price of ONE item
     txn_date: date
     supplier: Optional[str] = None
     notes: Optional[str] = None
@@ -37,20 +37,23 @@ def purchase_spare_part(
         raise HTTPException(status_code=404, detail="Part not found")
     if data.quantity <= 0:
         raise HTTPException(status_code=400, detail="Quantity must be greater than zero")
+    if data.unit_price <= 0:
+        raise HTTPException(status_code=400, detail="Price per item must be greater than zero")
+
+    total_amount = round(data.quantity * data.unit_price, 2)
 
     location = db.query(Location).filter(Location.is_current == True).first()
 
-    # 1. Create the expense (money out)
     last = db.query(Expense).filter(
         Expense.location_id == location.location_id,
         Expense.deleted_at == None
     ).order_by(Expense.expense_id.desc()).first()
     last_balance = last.balance if last else 0
-    new_balance = float(last_balance) - float(data.amount)
+    new_balance = float(last_balance) - float(total_amount)
 
     sp_type = db.query(ExpenseType).filter(ExpenseType.code == "spare_part").first()
 
-    desc = f"Spare part: {part.name} x{data.quantity}"
+    desc = f"Spare part: {part.name} x{data.quantity} @ {data.unit_price}/unit"
     if data.supplier:
         desc += f" ({data.supplier})"
 
@@ -59,7 +62,7 @@ def purchase_spare_part(
         expense_type_id=sp_type.type_id if sp_type else 1,
         txn_date=data.txn_date,
         description=desc,
-        debit=data.amount,
+        debit=total_amount,
         credit=0,
         balance=new_balance,
         is_common=False,
@@ -68,16 +71,14 @@ def purchase_spare_part(
     db.add(expense)
     db.flush()
 
-    # 2. Create the stock-IN (inventory up)
-    unit_price = float(data.amount) / float(data.quantity) if data.quantity else 0
     stock_txn = StockTransaction(
         part_id=data.part_id,
         location_id=location.location_id,
         txn_date=data.txn_date,
         direction="IN",
         quantity=data.quantity,
-        unit_price=unit_price,
-        total_amount=data.amount,
+        unit_price=data.unit_price,
+        total_amount=total_amount,
         machine_id=None,
         notes=data.notes or (f"Supplier: {data.supplier}" if data.supplier else None),
         issued_by=current_user.user_id,
@@ -85,16 +86,15 @@ def purchase_spare_part(
     db.add(stock_txn)
     db.flush()
 
-    # 3. Link them
     db.add(ExpenseStockLink(expense_id=expense.expense_id, stock_txn_id=stock_txn.stock_txn_id))
 
-    # 4. Audit
     db.add(AuditLog(
         table_name="purchases", record_id=stock_txn.stock_txn_id, action="CREATE",
-        new_value=f"bought {part.name} x{data.quantity} for {data.amount}" + (f" from {data.supplier}" if data.supplier else ""),
+        new_value=f"bought {part.name} x{data.quantity} @ {data.unit_price}/unit = {total_amount}" + (f" from {data.supplier}" if data.supplier else ""),
         changed_by=current_user.user_id,
     ))
     db.commit()
     return {
-        "message": f"Purchased {data.quantity} × {part.name} for {data.amount}. Stock and expenses updated.",
+        "message": f"Purchased {data.quantity} × {part.name} @ {data.unit_price}/unit = {total_amount} total. Stock and expenses updated.",
+        "total_amount": total_amount,
     }

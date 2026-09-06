@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import Layout from '../components/Layout';
+import PartPicker from '../components/PartPicker';
+import StyledSelect from '../components/StyledSelect';
+import ChipSelect from '../components/ChipSelect';
 import { createExpense, getExpenses, getExpenseTypes, getMachines, deleteExpense, getParts, purchaseSparePart, isViewer } from '../services/api';
 import * as ui from '../components/ui';
 
@@ -20,9 +23,9 @@ export default function Expenses() {
         debit: '',
         credit: '',
         machine_ids: [],
-        // spare-part fields
         part_id: '',
         quantity: '',
+        unit_price: '',
         supplier: '',
     });
 
@@ -52,22 +55,23 @@ export default function Expenses() {
         }));
     };
 
+    const sparePartTotal = (parseFloat(form.quantity) || 0) * (parseFloat(form.unit_price) || 0);
+
     const handleSubmit = async (e) => {
         e.preventDefault();
         setLoading(true); setError(''); setSuccess('');
         try {
             if (showSparePart) {
-                // route through purchase endpoint (updates stock + expense)
                 const res = await purchaseSparePart({
                     part_id: parseInt(form.part_id),
                     quantity: parseFloat(form.quantity),
-                    amount: parseFloat(form.debit),
+                    unit_price: parseFloat(form.unit_price),
                     txn_date: form.txn_date,
                     supplier: form.supplier || null,
                     notes: null,
                 });
                 setSuccess(res.data.message);
-                setForm(f => ({ ...f, description: '', debit: '', credit: '', machine_ids: [], part_id: '', quantity: '', supplier: '' }));
+                setForm(f => ({ ...f, description: '', debit: '', credit: '', machine_ids: [], part_id: '', quantity: '', unit_price: '', supplier: '' }));
             } else {
                 await createExpense({
                     txn_date: form.txn_date,
@@ -101,6 +105,9 @@ export default function Expenses() {
         }
     };
 
+    const typeOptions = types.map(t => ({ value: t.type_id, label: t.label }));
+    const machineOptions = machines.map(m => ({ value: m.machine_id, label: m.code }));
+
     return (
         <Layout>
             {!viewer && (
@@ -116,10 +123,7 @@ export default function Expenses() {
                             </div>
                             <div style={ui.field}>
                                 <label style={ui.label}>Type</label>
-                                <select style={ui.input} name="expense_type_id" value={form.expense_type_id} onChange={handleChange} required>
-                                    <option value="">Select type</option>
-                                    {types.map(t => <option key={t.type_id} value={t.type_id}>{t.label}</option>)}
-                                </select>
+                                <StyledSelect options={typeOptions} value={form.expense_type_id} onChange={(v) => setForm(f => ({ ...f, expense_type_id: v }))} placeholder="Select type" />
                             </div>
                         </div>
 
@@ -139,30 +143,30 @@ export default function Expenses() {
 
                         {showSparePart ? (
                             <>
-                                <div style={styles.hint}>This will add the part to stock and record the expense together.</div>
+                                <div style={styles.hint}>Enter the price of ONE item — total is calculated automatically. This adds the part to stock and records the expense together.</div>
                                 <div style={ui.row2}>
                                     <div style={ui.field}>
                                         <label style={ui.label}>Part</label>
-                                        <select style={ui.input} name="part_id" value={form.part_id} onChange={handleChange} required>
-                                            <option value="">Select part</option>
-                                            {parts.map(p => <option key={p.part_id} value={p.part_id}>{p.name}</option>)}
-                                        </select>
+                                        <PartPicker parts={parts} value={form.part_id ? parseInt(form.part_id) : ''} onChange={(id) => setForm(f => ({ ...f, part_id: id }))} />
                                     </div>
                                     <div style={ui.field}>
-                                        <label style={ui.label}>Quantity</label>
+                                        <label style={ui.label}>Quantity Bought</label>
                                         <input style={ui.input} type="number" name="quantity" value={form.quantity} onChange={handleChange} min="0" step="0.01" required />
                                     </div>
                                 </div>
                                 <div style={ui.row2}>
                                     <div style={ui.field}>
-                                        <label style={ui.label}>Total Amount (GHS)</label>
-                                        <input style={ui.input} type="number" name="debit" value={form.debit} onChange={handleChange} min="0" step="0.01" required />
+                                        <label style={ui.label}>Price of 1 Item (GHS)</label>
+                                        <input style={ui.input} type="number" name="unit_price" value={form.unit_price} onChange={handleChange} min="0" step="0.01" required />
                                     </div>
                                     <div style={ui.field}>
                                         <label style={ui.label}>Supplier / Shop</label>
                                         <input style={ui.input} type="text" name="supplier" value={form.supplier} onChange={handleChange} placeholder="Shop name" />
                                     </div>
                                 </div>
+                                {sparePartTotal > 0 && (
+                                    <div style={styles.totalHint}>Total: ₵{sparePartTotal.toLocaleString()}</div>
+                                )}
                             </>
                         ) : (
                             <>
@@ -238,6 +242,7 @@ const styles = {
     chip: { padding: '8px 16px', border: `0.5px solid ${ui.colors.borderStrong}`, borderRadius: '8px', cursor: 'pointer', backgroundColor: '#fff', userSelect: 'none', fontSize: '13px', color: ui.colors.ink },
     chipActive: { padding: '8px 16px', border: `0.5px solid ${ui.colors.accent}`, borderRadius: '8px', cursor: 'pointer', backgroundColor: ui.colors.accentSoft, color: ui.colors.accent, userSelect: 'none', fontSize: '13px', fontWeight: '500' },
     hint: { fontSize: '12px', color: ui.colors.muted, marginBottom: '14px' },
+    totalHint: { fontSize: '13px', color: ui.colors.ink, fontWeight: '500', marginBottom: '14px', marginTop: '-6px' },
     del: { padding: '5px 12px', backgroundColor: '#fff', color: ui.colors.accent, border: `0.5px solid #f0c0c0`, borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: '500' },
     wrap: { display: 'inline-flex', gap: '6px' },
     yes: { padding: '5px 12px', backgroundColor: ui.colors.accent, color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: '500' },

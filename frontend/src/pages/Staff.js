@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import Layout from '../components/Layout';
+import ChipSelect from '../components/ChipSelect';
 import { getStaff, createStaff, removeStaff } from '../services/api';
 import * as ui from '../components/ui';
 
@@ -68,6 +69,10 @@ export default function Staff() {
     };
 
     const money = (amt, cur) => amt == null ? '-' : `${cur === 'INR' ? '₹' : '₵'}${amt.toLocaleString()}`;
+    const currencyOptions = [
+        { value: 'GHS', label: 'GHS (Cedi)' },
+        { value: 'INR', label: 'INR (Rupee)' },
+    ];
 
     return (
         <Layout>
@@ -103,10 +108,7 @@ export default function Staff() {
                         </div>
                         <div style={ui.field}>
                             <label style={ui.label}>Currency</label>
-                            <select style={ui.input} name="currency" value={form.currency} onChange={handleChange}>
-                                <option value="GHS">GHS (Cedi)</option>
-                                <option value="INR">INR (Rupee)</option>
-                            </select>
+                            <ChipSelect options={currencyOptions} value={form.currency} onChange={(v) => setForm(f => ({ ...f, currency: v }))} />
                         </div>
                     </div>
                     <button style={loading ? ui.btnDisabled : ui.btn} type="submit" disabled={loading}>

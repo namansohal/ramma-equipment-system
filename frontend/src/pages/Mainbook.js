@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import Layout from '../components/Layout';
-import { getMainbook, createMainbook, deleteMainbook, isViewer } from '../services/api';
+import StyledSelect from '../components/StyledSelect';
+import { getMainbook, createMainbook, deleteMainbook, getMachines, isViewer } from '../services/api';
 import * as ui from '../components/ui';
 
 export default function Mainbook() {
     const viewer = isViewer();
     const [records, setRecords] = useState([]);
+    const [machines, setMachines] = useState([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
@@ -14,12 +16,14 @@ export default function Mainbook() {
     const [form, setForm] = useState({
         txn_date: new Date().toISOString().split('T')[0],
         description: '',
-        direction: 'in',        // 'in' = money in, 'out' = money out
+        direction: 'in',
         amount: '',
         destination: 'expense',
+        forMachine: false,
+        machine_id: '',
     });
 
-    useEffect(() => { loadRecords(); }, [filterDate]);
+    useEffect(() => { loadRecords(); loadMachines(); }, [filterDate]);
 
     const loadRecords = async () => {
         try {
@@ -28,17 +32,22 @@ export default function Mainbook() {
             setRecords(res.data);
         } catch (e) { console.error(e); }
     };
+    const loadMachines = async () => {
+        try { const res = await getMachines(); setMachines(res.data); } catch (e) { console.error(e); }
+    };
 
     const handleChange = (e) => {
         const { name, value } = e.target;
         setForm(f => ({ ...f, [name]: value }));
     };
 
+    const selectMachine = (id) => {
+        setForm(f => ({ ...f, machine_id: id }));
+    };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
-        setLoading(true);
-        setError('');
-        setSuccess('');
+        setLoading(true); setError(''); setSuccess('');
         try {
             const payload = {
                 txn_date: form.txn_date,
@@ -46,10 +55,11 @@ export default function Mainbook() {
                 debit: form.direction === 'out' ? parseFloat(form.amount || 0) : 0,
                 credit: form.direction === 'in' ? parseFloat(form.amount || 0) : 0,
                 destination: form.direction === 'out' ? form.destination : null,
+                machine_id: (form.direction === 'in' && form.forMachine && form.machine_id) ? parseInt(form.machine_id) : null,
             };
             await createMainbook(payload);
             setSuccess('Entry recorded');
-            setForm(f => ({ ...f, description: '', amount: '' }));
+            setForm(f => ({ ...f, description: '', amount: '', forMachine: false, machine_id: '' }));
             loadRecords();
         } catch (err) {
             setError(err.response?.data?.detail || 'Failed to save');
@@ -59,8 +69,7 @@ export default function Mainbook() {
     };
 
     const handleDelete = async (id) => {
-        setError('');
-        setSuccess('');
+        setError(''); setSuccess('');
         try {
             const res = await deleteMainbook(id);
             setSuccess(res.data.message);
@@ -71,6 +80,16 @@ export default function Mainbook() {
             setConfirmId(null);
         }
     };
+
+    const directionOptions = [
+        { value: 'in', label: 'Money In' },
+        { value: 'out', label: 'Money Out' },
+    ];
+    const destinationOptions = [
+        { value: 'expense', label: 'Expense Book' },
+        { value: 'refund', label: 'Refund to Customer' },
+        { value: 'momo', label: 'MOMO' },
+    ];
 
     return (
         <Layout>
@@ -87,10 +106,7 @@ export default function Mainbook() {
                             </div>
                             <div style={ui.field}>
                                 <label style={ui.label}>Direction</label>
-                                <select style={ui.input} name="direction" value={form.direction} onChange={handleChange}>
-                                    <option value="in">Money In</option>
-                                    <option value="out">Money Out</option>
-                                </select>
+                                <StyledSelect options={directionOptions} value={form.direction} onChange={(v) => setForm(f => ({ ...f, direction: v }))} />
                             </div>
                         </div>
                         <div style={ui.field}>
@@ -105,17 +121,39 @@ export default function Mainbook() {
                             {form.direction === 'out' && (
                                 <div style={ui.field}>
                                     <label style={ui.label}>Where is it going?</label>
-                                    <select style={ui.input} name="destination" value={form.destination} onChange={handleChange}>
-                                        <option value="expense">Expense Book</option>
-                                        <option value="refund">Refund to Customer</option>
-                                        <option value="momo">MOMO</option>
-                                    </select>
+                                    <StyledSelect options={destinationOptions} value={form.destination} onChange={(v) => setForm(f => ({ ...f, destination: v }))} />
                                 </div>
                             )}
                         </div>
+
                         {form.direction === 'out' && form.destination === 'expense' && (
                             <div style={styles.hint}>This will also appear as money-in in the Expense book.</div>
                         )}
+
+                        {form.direction === 'in' && (
+                            <div style={ui.field}>
+                                <label style={styles.checkboxLabel}>
+                                    <input type="checkbox" checked={form.forMachine} onChange={e => setForm(f => ({ ...f, forMachine: e.target.checked, machine_id: '' }))} />
+                                    This is payment for a specific machine
+                                </label>
+                            </div>
+                        )}
+
+                        {form.direction === 'in' && form.forMachine && (
+                            <div style={ui.field}>
+                                <label style={ui.label}>Which machine?</label>
+                                <div style={styles.chipRow}>
+                                    {machines.map(m => (
+                                        <div key={m.machine_id} onClick={() => selectMachine(m.machine_id)}
+                                            style={form.machine_id === m.machine_id ? styles.chipActive : styles.chip}>
+                                            {m.code}
+                                        </div>
+                                    ))}
+                                </div>
+                                <div style={styles.hint}>This amount will count toward this machine's income.</div>
+                            </div>
+                        )}
+
                         <button style={loading ? ui.btnDisabled : ui.btn} type="submit" disabled={loading}>
                             {loading ? 'Saving...' : 'Save Entry'}
                         </button>
@@ -175,6 +213,10 @@ export default function Mainbook() {
 
 const styles = {
     hint: { fontSize: '12px', color: ui.colors.muted, marginBottom: '14px', marginTop: '-6px' },
+    checkboxLabel: { display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: ui.colors.ink, cursor: 'pointer' },
+    chipRow: { display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '4px' },
+    chip: { padding: '8px 16px', border: `0.5px solid ${ui.colors.borderStrong}`, borderRadius: '8px', cursor: 'pointer', backgroundColor: '#fff', userSelect: 'none', fontSize: '13px', color: ui.colors.ink },
+    chipActive: { padding: '8px 16px', border: `0.5px solid ${ui.colors.accent}`, borderRadius: '8px', cursor: 'pointer', backgroundColor: ui.colors.accentSoft, color: ui.colors.accent, userSelect: 'none', fontSize: '13px', fontWeight: '500' },
     headRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' },
     filterWrap: { display: 'flex', alignItems: 'center', gap: '8px' },
     filterLabel: { fontSize: '12px', color: ui.colors.muted },

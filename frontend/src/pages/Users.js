@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import Layout from '../components/Layout';
+import StyledSelect from '../components/StyledSelect';
 import { getUsers, createUser, getRoles, deactivateUser, changeName, changeCode, changeRole } from '../services/api';
 import * as ui from '../components/ui';
 
@@ -12,7 +13,7 @@ export default function Users() {
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
     const [confirmId, setConfirmId] = useState(null);
-    const [edit, setEdit] = useState(null); // { userId, field, value }
+    const [edit, setEdit] = useState(null);
     const [form, setForm] = useState({
         full_name: '',
         username: '',
@@ -93,6 +94,7 @@ export default function Users() {
     };
 
     const editing = (userId, field) => edit && edit.userId === userId && edit.field === field;
+    const roleOptions = roles.map(r => ({ value: r.role_id, label: r.name }));
 
     return (
         <Layout>
@@ -118,10 +120,7 @@ export default function Users() {
                         </div>
                         <div style={ui.field}>
                             <label style={ui.label}>Role</label>
-                            <select style={ui.input} name="role_id" value={form.role_id} onChange={handleChange} required>
-                                <option value="">Select role</option>
-                                {roles.map(r => <option key={r.role_id} value={r.role_id}>{r.name}</option>)}
-                            </select>
+                            <StyledSelect options={roleOptions} value={form.role_id} onChange={(v) => setForm(f => ({ ...f, role_id: v }))} placeholder="Select role" />
                         </div>
                     </div>
                     <div style={ui.field}>
@@ -149,7 +148,6 @@ export default function Users() {
                     <tbody>
                         {users.map(u => (
                             <tr key={u.user_id} style={ui.tr}>
-                                {/* NAME */}
                                 <td style={ui.td}>
                                     {editing(u.user_id, 'name') ? (
                                         <span style={styles.editWrap}>
@@ -162,7 +160,6 @@ export default function Users() {
                                     )}
                                 </td>
                                 <td style={ui.td}>{u.username}</td>
-                                {/* CODE */}
                                 <td style={ui.td}>
                                     {editing(u.user_id, 'code') ? (
                                         <span style={styles.editWrap}>
@@ -174,13 +171,12 @@ export default function Users() {
                                         <span>{u.employee_code || '-'}{isOwner && u.role !== 'owner' && <button onClick={() => startEdit(u.user_id, 'code', u.employee_code)} style={styles.editLink}>edit</button>}</span>
                                     )}
                                 </td>
-                                {/* ROLE */}
                                 <td style={{ ...ui.td, textTransform: 'capitalize' }}>
                                     {editing(u.user_id, 'role') ? (
                                         <span style={styles.editWrap}>
-                                            <select value={edit.value} onChange={e => setEdit({ ...edit, value: e.target.value })} style={styles.editInput}>
-                                                {roles.filter(r => r.name !== 'owner').map(r => <option key={r.role_id} value={r.role_id}>{r.name}</option>)}
-                                            </select>
+                                            <div style={{ width: '160px' }}>
+                                                <StyledSelect options={roles.filter(r => r.name !== 'owner').map(r => ({ value: r.role_id, label: r.name }))} value={edit.value} onChange={(v) => setEdit({ ...edit, value: v })} />
+                                            </div>
                                             <button onClick={saveEdit} style={styles.saveBtn}>Save</button>
                                             <button onClick={() => setEdit(null)} style={styles.cancelBtn}>×</button>
                                         </span>
@@ -188,7 +184,6 @@ export default function Users() {
                                         <span>{u.role}{isOwner && u.role !== 'owner' && <button onClick={() => { const rid = roles.find(r => r.name === u.role)?.role_id; startEdit(u.user_id, 'role', rid); }} style={styles.editLink}>edit</button>}</span>
                                     )}
                                 </td>
-                                {/* REMOVE */}
                                 <td style={{ ...ui.td, textAlign: 'right' }}>
                                     {u.role === 'owner' || u.user_id === currentUser.user_id ? (
                                         <span style={{ color: ui.colors.muted, fontSize: '12px' }}>—</span>

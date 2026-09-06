@@ -20,6 +20,8 @@ export default function MachineDetail() {
     if (error) return <Layout><div style={ui.alertError}>{error}</div></Layout>;
     if (!data) return <Layout><div style={{ color: colors.muted }}>Loading...</div></Layout>;
 
+    const profitPositive = data.summary.profit >= 0;
+
     return (
         <Layout>
             <div style={styles.head}>
@@ -32,13 +34,19 @@ export default function MachineDetail() {
                     <div style={styles.statLabel}>DISTINCT PARTS USED</div>
                     <div style={styles.statValue}>{data.summary.distinct_parts}</div>
                 </div>
+                <div style={styles.stat}>
+                    <div style={styles.statLabel}>TOTAL INCOME</div>
+                    <div style={styles.statValue}>₵{data.summary.total_income.toLocaleString()}</div>
+                </div>
                 <div style={{ ...styles.stat, borderTop: `2px solid ${colors.accent}` }}>
                     <div style={styles.statLabel}>TOTAL EXPENSES</div>
                     <div style={styles.statValue}>₵{data.summary.total_expense.toLocaleString()}</div>
                 </div>
-                <div style={styles.stat}>
-                    <div style={styles.statLabel}>EXPENSE RECORDS</div>
-                    <div style={styles.statValue}>{data.summary.expense_count}</div>
+                <div style={{ ...styles.stat, borderTop: `2px solid ${profitPositive ? '#15803d' : colors.accent}` }}>
+                    <div style={styles.statLabel}>PROFIT</div>
+                    <div style={{ ...styles.statValue, color: profitPositive ? '#15803d' : colors.accent }}>
+                        ₵{data.summary.profit.toLocaleString()}
+                    </div>
                 </div>
             </div>
 
@@ -87,7 +95,7 @@ export default function MachineDetail() {
             </div>
 
             <div style={ui.card}>
-                <div style={ui.cardTitle}>Expenses for {data.machine.code}</div>
+                <div style={ui.cardTitle}>Expenses & Costs for {data.machine.code}</div>
                 <table style={ui.table}>
                     <thead>
                         <tr><th style={ui.th}>Date</th><th style={ui.th}>Description</th><th style={ui.th}>Amount (GHS)</th></tr>
@@ -113,9 +121,9 @@ export default function MachineDetail() {
 const styles = {
     head: { display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '20px' },
     machineCode: { fontSize: '24px', fontWeight: '500', color: colors.ink, letterSpacing: '-0.5px' },
-    statGrid: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1px', backgroundColor: colors.border, border: `0.5px solid ${colors.border}`, borderRadius: '12px', overflow: 'hidden', marginBottom: '20px' },
+    statGrid: { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1px', backgroundColor: colors.border, border: `0.5px solid ${colors.border}`, borderRadius: '12px', overflow: 'hidden', marginBottom: '20px' },
     stat: { backgroundColor: '#fff', padding: '18px 20px' },
     statLabel: { fontSize: '11px', color: colors.muted, marginBottom: '8px', letterSpacing: '0.3px' },
-    statValue: { fontSize: '24px', fontWeight: '500', color: colors.ink, letterSpacing: '-0.5px', lineHeight: '1' },
+    statValue: { fontSize: '22px', fontWeight: '500', color: colors.ink, letterSpacing: '-0.5px', lineHeight: '1' },
     twoCol: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' },
 };

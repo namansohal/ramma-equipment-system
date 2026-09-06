@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import Layout from '../components/Layout';
+import ChipSelect from '../components/ChipSelect';
 import { getMachines, getDowntime, createDowntime, endDowntime } from '../services/api';
 import * as ui from '../components/ui';
 
@@ -70,6 +71,8 @@ export default function Downtime() {
         }
     };
 
+    const machineOptions = machines.map(m => ({ value: m.machine_id, label: m.code }));
+
     return (
         <Layout>
             <div style={ui.card}>
@@ -77,18 +80,13 @@ export default function Downtime() {
                 {error && <div style={ui.alertError}>{error}</div>}
                 {success && <div style={ui.alertSuccess}>{success}</div>}
                 <form onSubmit={handleSubmit}>
-                    <div style={ui.row2}>
-                        <div style={ui.field}>
-                            <label style={ui.label}>Machine</label>
-                            <select style={ui.input} name="machine_id" value={form.machine_id} onChange={handleChange} required>
-                                <option value="">Select machine</option>
-                                {machines.map(m => <option key={m.machine_id} value={m.machine_id}>{m.code}</option>)}
-                            </select>
-                        </div>
-                        <div style={ui.field}>
-                            <label style={ui.label}>Reason</label>
-                            <input style={ui.input} type="text" name="reason" value={form.reason} onChange={handleChange} placeholder="Engine repair, waiting for parts..." required />
-                        </div>
+                    <div style={ui.field}>
+                        <label style={ui.label}>Machine</label>
+                        <ChipSelect options={machineOptions} value={form.machine_id} onChange={(v) => setForm(f => ({ ...f, machine_id: v }))} />
+                    </div>
+                    <div style={ui.field}>
+                        <label style={ui.label}>Reason</label>
+                        <input style={ui.input} type="text" name="reason" value={form.reason} onChange={handleChange} placeholder="Engine repair, waiting for parts..." required />
                     </div>
                     <div style={ui.row2}>
                         <div style={ui.field}>
