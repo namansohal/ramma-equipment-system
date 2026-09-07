@@ -26,6 +26,7 @@ class MainbookCreate(BaseModel):
     credit: Optional[float] = 0
     destination: Optional[str] = None
     machine_id: Optional[int] = None
+    is_carry_forward: Optional[bool] = False
 
 
 class MainbookEdit(BaseModel):
@@ -42,16 +43,52 @@ def _current_location(db):
     return db.query(Location).filter(Location.is_current == True).first()
 
 
-def _recompute_mainbook_balances(db: Session, location_id: int):
+def _ordered_rows(db: Session, location_id: int):
     rows = db.query(MainbookTransaction).filter(
         MainbookTransaction.location_id == location_id,
         MainbookTransaction.deleted_at == None
-    ).order_by(MainbookTransaction.transaction_id).all()
+    ).all()
+    rows.sort(key=lambda r: (r.txn_date, 0 if r.is_carry_forward else 1, r.transaction_id))
+    return rows
 
+
+def _recompute_mainbook_balances(db: Session, location_id: int):
+    db.flush()
+    rows = _ordered_rows(db, location_id)
     balance = 0.0
     for r in rows:
         balance = balance + float(r.credit or 0) - float(r.debit or 0)
         r.balance = balance
+
+
+def _recompute_expense_balances(db: Session, location_id: int):
+    rows = db.query(Expense).filter(
+        Expense.location_id == location_id,
+        Expense.deleted_at == None
+    ).order_by(Expense.expense_id).all()
+    balance = 0.0
+    for r in rows:
+        balance = balance + float(r.credit or 0) - float(r.debit or 0)
+        r.balance = balance
+
+
+def _delete_linked_expense(db: Session, transaction_id: int, deleted_by: int):
+    """When a Mainbook entry is deleted, also soft-delete its linked Expense row."""
+    link = db.query(MainbookExpenseLink).filter(MainbookExpenseLink.transaction_id == transaction_id).first()
+    if link:
+        exp = db.query(Expense).filter(Expense.expense_id == link.expense_id, Expense.deleted_at == None).first()
+        if exp:
+            exp.deleted_at = datetime.utcnow()
+            exp.deleted_by = deleted_by
+            db.add(AuditLog(
+                table_name="expenses",
+                record_id=exp.expense_id,
+                action="DELETE",
+                old_value=f"auto-deleted: linked mainbook entry {transaction_id} was deleted",
+                changed_by=deleted_by,
+            ))
+            db.flush()
+            _recompute_expense_balances(db, exp.location_id)
 
 
 @router.post("/", response_model=MainbookResponse)
@@ -72,13 +109,6 @@ def create_transaction(
     if data.destination and data.destination not in ("expense", "refund", "momo"):
         raise HTTPException(status_code=400, detail="Invalid destination")
 
-    last = db.query(MainbookTransaction).filter(
-        MainbookTransaction.location_id == location.location_id,
-        MainbookTransaction.deleted_at == None
-    ).order_by(MainbookTransaction.transaction_id.desc()).first()
-    last_balance = last.balance if last else 0
-    new_balance = float(last_balance) + credit - debit
-
     clean_description = smart_capitalize(data.description)
 
     desc = clean_description
@@ -93,7 +123,8 @@ def create_transaction(
         description=desc,
         debit=debit,
         credit=credit,
-        balance=new_balance,
+        balance=0,
+        is_carry_forward=bool(data.is_carry_forward),
         created_by=current_user.user_id,
     )
     db.add(txn)
@@ -132,11 +163,13 @@ def create_transaction(
             txn_date=data.txn_date,
         ))
 
+    _recompute_mainbook_balances(db, location.location_id)
+
     db.add(AuditLog(
         table_name="mainbook_transactions",
         record_id=txn.transaction_id,
         action="CREATE",
-        new_value=f"debit={debit} credit={credit} dest={data.destination or '-'} machine={data.machine_id or '-'} desc={data.description}",
+        new_value=f"debit={debit} credit={credit} dest={data.destination or '-'} machine={data.machine_id or '-'} carry_forward={data.is_carry_forward} desc={data.description}",
         changed_by=current_user.user_id,
     ))
     db.commit()
@@ -154,15 +187,21 @@ def list_transactions(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    query = db.query(MainbookTransaction).filter(MainbookTransaction.deleted_at == None)
+    location = _current_location(db)
+    if not location:
+        return []
+
+    rows = _ordered_rows(db, location.location_id)
+
     if on_date:
-        query = query.filter(MainbookTransaction.txn_date == on_date)
+        rows = [r for r in rows if r.txn_date == on_date]
     else:
         if from_date:
-            query = query.filter(MainbookTransaction.txn_date >= from_date)
+            rows = [r for r in rows if r.txn_date >= from_date]
         if to_date:
-            query = query.filter(MainbookTransaction.txn_date <= to_date)
-    return query.order_by(MainbookTransaction.txn_date, MainbookTransaction.transaction_id).offset(skip).limit(limit).all()
+            rows = [r for r in rows if r.txn_date <= to_date]
+
+    return rows[skip: skip + limit]
 
 
 @router.patch("/{transaction_id}")
@@ -251,6 +290,7 @@ def bulk_delete_transactions(
         deleted_count += 1
 
         db.query(MachineIncome).filter(MachineIncome.transaction_id == transaction_id).delete()
+        _delete_linked_expense(db, transaction_id, current_user.user_id)
 
         db.add(AuditLog(
             table_name="mainbook_transactions",
@@ -284,6 +324,7 @@ def delete_transaction(
     txn.deleted_by = current_user.user_id
 
     db.query(MachineIncome).filter(MachineIncome.transaction_id == transaction_id).delete()
+    _delete_linked_expense(db, transaction_id, current_user.user_id)
 
     _recompute_mainbook_balances(db, txn.location_id)
 

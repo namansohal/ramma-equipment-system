@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Numeric, Date, DateTime, ForeignKey, Text
+from sqlalchemy import Column, Integer, String, Numeric, Date, DateTime, ForeignKey, Text, Boolean
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.database import Base
@@ -14,6 +14,7 @@ class MainbookTransaction(Base):
     debit          = Column(Numeric(14, 2), default=0)
     credit         = Column(Numeric(14, 2), default=0)
     balance        = Column(Numeric(14, 2), nullable=True)
+    is_carry_forward = Column(Boolean, default=False, nullable=False)
     original_balance_imported = Column(Numeric(14, 2), nullable=True)
     created_by     = Column(Integer, ForeignKey("users.user_id"), nullable=True)
     created_at     = Column(DateTime(timezone=True), server_default=func.now())

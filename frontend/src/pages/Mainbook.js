@@ -29,6 +29,7 @@ export default function Mainbook() {
         destination: 'expense',
         forMachine: false,
         machine_id: '',
+        is_carry_forward: false,
     });
 
     useEffect(() => { loadRecords(); loadMachines(); }, [filterDate]);
@@ -74,10 +75,11 @@ export default function Mainbook() {
                 credit: form.direction === 'in' ? parseFloat(form.amount || 0) : 0,
                 destination: form.direction === 'out' ? form.destination : null,
                 machine_id: (form.direction === 'in' && form.forMachine && form.machine_id) ? parseInt(form.machine_id) : null,
+                is_carry_forward: form.is_carry_forward,
             };
             await createMainbook(payload);
             setSuccess('Entry recorded');
-            setForm(f => ({ ...f, description: '', amount: '', forMachine: false, machine_id: '' }));
+            setForm(f => ({ ...f, description: '', amount: '', forMachine: false, machine_id: '', is_carry_forward: false }));
             loadRecords();
         } catch (err) {
             setError(getErrorMessage(err, 'Failed to save'));
@@ -208,6 +210,13 @@ export default function Mainbook() {
                             </div>
                         )}
 
+                        <div style={ui.field}>
+                            <label style={styles.checkboxLabel}>
+                                <input type="checkbox" checked={form.is_carry_forward} onChange={e => setForm(f => ({ ...f, is_carry_forward: e.target.checked }))} />
+                                This is a Carry Forward / Opening Balance (pins to top of its date)
+                            </label>
+                        </div>
+
                         <button style={loading ? ui.btnDisabled : ui.btn} type="submit" disabled={loading}>
                             {loading ? 'Saving...' : 'Save Entry'}
                         </button>
@@ -276,7 +285,10 @@ export default function Mainbook() {
                                     </>
                                 ) : (
                                     <>
-                                        <td style={ui.td}>{r.txn_date}</td>
+                                        <td style={ui.td}>
+                                            {r.txn_date}
+                                            {r.is_carry_forward && <span style={styles.cfBadge}>C/F</span>}
+                                        </td>
                                         <td style={ui.td}>{r.description}</td>
                                         <td style={ui.td}>{r.debit ? parseFloat(r.debit).toLocaleString() : '-'}</td>
                                         <td style={ui.td}>{r.credit ? parseFloat(r.credit).toLocaleString() : '-'}</td>
@@ -330,4 +342,5 @@ const styles = {
     no: { padding: '5px 12px', backgroundColor: '#fff', color: ui.colors.inkSoft, border: `0.5px solid ${ui.colors.borderStrong}`, borderRadius: '6px', cursor: 'pointer', fontSize: '12px' },
     editInput: { padding: '6px 8px', border: `0.5px solid ${ui.colors.borderStrong}`, borderRadius: '6px', fontSize: '13px', width: '110px' },
     editInputWide: { padding: '6px 8px', border: `0.5px solid ${ui.colors.borderStrong}`, borderRadius: '6px', fontSize: '13px', width: '100%' },
+    cfBadge: { marginLeft: '8px', fontSize: '10px', fontWeight: '600', color: ui.colors.accent, backgroundColor: ui.colors.accentSoft, padding: '1px 6px', borderRadius: '10px' },
 };
