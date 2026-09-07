@@ -34,6 +34,7 @@ export default function Expenses() {
         quantity: '',
         unit_price: '',
         supplier: '',
+        is_carry_forward: false,
     });
 
     useEffect(() => {
@@ -102,9 +103,10 @@ export default function Expenses() {
                     debit: form.direction === 'out' ? amount : 0,
                     credit: form.direction === 'in' ? amount : 0,
                     machine_ids: form.machine_ids,
+                    is_carry_forward: form.is_carry_forward,
                 });
                 setSuccess('Expense recorded');
-                setForm(f => ({ ...f, description: '', amount: '', machine_ids: [] }));
+                setForm(f => ({ ...f, description: '', amount: '', machine_ids: [], is_carry_forward: false }));
             }
             loadExpenses();
         } catch (err) {
@@ -245,6 +247,12 @@ export default function Expenses() {
                                         <input style={ui.input} type="number" name="amount" value={form.amount} onChange={handleChange} min="0" step="0.01" required />
                                     </div>
                                 </div>
+                                <div style={ui.field}>
+                                    <label style={styles.checkboxLabel}>
+                                        <input type="checkbox" checked={form.is_carry_forward} onChange={e => setForm(f => ({ ...f, is_carry_forward: e.target.checked }))} />
+                                        This is a Carry Forward / Opening Balance (pins to top of its date)
+                                    </label>
+                                </div>
                             </>
                         )}
 
@@ -311,7 +319,10 @@ export default function Expenses() {
                                     </>
                                 ) : (
                                     <>
-                                        <td style={ui.td}>{e.txn_date}</td>
+                                        <td style={ui.td}>
+                                            {e.txn_date}
+                                            {e.is_carry_forward && <span style={styles.cfBadge}>C/F</span>}
+                                        </td>
                                         <td style={ui.td}>{e.description}</td>
                                         <td style={ui.td}>{e.debit ? parseFloat(e.debit).toLocaleString() : '-'}</td>
                                         <td style={ui.td}>{e.credit ? parseFloat(e.credit).toLocaleString() : '-'}</td>
@@ -351,7 +362,8 @@ const styles = {
     chipActive: { padding: '8px 16px', border: `0.5px solid ${ui.colors.accent}`, borderRadius: '8px', cursor: 'pointer', backgroundColor: ui.colors.accentSoft, color: ui.colors.accent, userSelect: 'none', fontSize: '13px', fontWeight: '500' },
     hint: { fontSize: '12px', color: ui.colors.muted, marginBottom: '14px' },
     totalHint: { fontSize: '13px', color: ui.colors.ink, fontWeight: '500', marginBottom: '14px', marginTop: '-6px' },
-    headRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' },
+    checkboxLabel: { display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: ui.colors.ink, cursor: 'pointer' },
+    headRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px', flexWrap: 'wrap', gap: '10px' },
     bulkText: { fontSize: '12px', color: ui.colors.muted },
     bulkDelBtn: { padding: '6px 14px', backgroundColor: ui.colors.accent, color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: '500' },
     del: { padding: '5px 12px', backgroundColor: '#fff', color: ui.colors.accent, border: `0.5px solid #f0c0c0`, borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: '500' },
@@ -361,4 +373,5 @@ const styles = {
     no: { padding: '5px 12px', backgroundColor: '#fff', color: ui.colors.inkSoft, border: `0.5px solid ${ui.colors.borderStrong}`, borderRadius: '6px', cursor: 'pointer', fontSize: '12px' },
     editInput: { padding: '6px 8px', border: `0.5px solid ${ui.colors.borderStrong}`, borderRadius: '6px', fontSize: '13px', width: '110px' },
     editInputWide: { padding: '6px 8px', border: `0.5px solid ${ui.colors.borderStrong}`, borderRadius: '6px', fontSize: '13px', width: '100%' },
+    cfBadge: { marginLeft: '8px', fontSize: '10px', fontWeight: '600', color: ui.colors.accent, backgroundColor: ui.colors.accentSoft, padding: '1px 6px', borderRadius: '10px' },
 };

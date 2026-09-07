@@ -21,12 +21,18 @@ class BulkDelete(BaseModel):
     ids: List[int]
 
 
-def _recompute_expense_balances(db: Session, location_id: int):
+def _ordered_expense_rows(db: Session, location_id: int):
     rows = db.query(Expense).filter(
         Expense.location_id == location_id,
         Expense.deleted_at == None
-    ).order_by(Expense.expense_id).all()
+    ).all()
+    rows.sort(key=lambda r: (r.txn_date, 0 if r.is_carry_forward else 1, r.expense_id))
+    return rows
 
+
+def _recompute_expense_balances(db: Session, location_id: int):
+    db.flush()
+    rows = _ordered_expense_rows(db, location_id)
     balance = 0.0
     for r in rows:
         balance = balance + float(r.credit or 0) - float(r.debit or 0)
@@ -43,14 +49,6 @@ def create_expense(
     if not location:
         raise HTTPException(status_code=400, detail="No current location set")
 
-    last = db.query(Expense).filter(
-        Expense.location_id == location.location_id,
-        Expense.deleted_at == None
-    ).order_by(Expense.expense_id.desc()).first()
-
-    last_balance = last.balance if last else 0
-    new_balance = float(last_balance) + float(data.credit) - float(data.debit)
-
     is_common = len(data.machine_ids) == 0
 
     expense = Expense(
@@ -60,8 +58,9 @@ def create_expense(
         description=smart_capitalize(data.description),
         debit=data.debit,
         credit=data.credit,
-        balance=new_balance,
+        balance=0,
         is_common=is_common,
+        is_carry_forward=bool(getattr(data, "is_carry_forward", False)),
         created_by=current_user.user_id,
     )
     db.add(expense)
@@ -69,6 +68,8 @@ def create_expense(
 
     for machine_id in data.machine_ids:
         db.add(ExpenseMachineLink(expense_id=expense.expense_id, machine_id=machine_id))
+
+    _recompute_expense_balances(db, location.location_id)
 
     db.add(AuditLog(
         table_name="expenses",
@@ -91,12 +92,18 @@ def get_expenses(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    query = db.query(Expense).filter(Expense.deleted_at == None)
+    location = db.query(Location).filter(Location.is_current == True).first()
+    if not location:
+        return []
+
+    rows = _ordered_expense_rows(db, location.location_id)
+
     if from_date:
-        query = query.filter(Expense.txn_date >= from_date)
+        rows = [r for r in rows if r.txn_date >= from_date]
     if to_date:
-        query = query.filter(Expense.txn_date <= to_date)
-    return query.order_by(Expense.txn_date, Expense.expense_id).offset(skip).limit(limit).all()
+        rows = [r for r in rows if r.txn_date <= to_date]
+
+    return rows[skip: skip + limit]
 
 
 @router.patch("/{expense_id}")

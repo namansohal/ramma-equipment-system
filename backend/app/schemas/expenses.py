@@ -12,12 +12,13 @@ class ExpenseCreate(BaseModel):
     credit: Optional[Decimal] = 0
     machine_ids: Optional[List[int]] = []
     notes: Optional[str] = None
+    is_carry_forward: Optional[bool] = False
 
 
 class ExpenseEdit(BaseModel):
     txn_date: Optional[date] = None
     description: Optional[str] = None
-    amount: Optional[Decimal] = None  # replaces whichever of debit/credit was non-zero
+    amount: Optional[Decimal] = None
 
 
 class ExpenseResponse(BaseModel):
@@ -28,6 +29,7 @@ class ExpenseResponse(BaseModel):
     credit: Optional[Decimal]
     balance: Optional[Decimal]
     is_common: bool
+    is_carry_forward: bool
     machine_unresolved: bool
 
     class Config:
