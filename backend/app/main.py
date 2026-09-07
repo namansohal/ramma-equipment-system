@@ -8,7 +8,11 @@ app = FastAPI(title="Ramma Equipment System")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=[
+        "http://localhost:3000",
+        "https://ramma-equipment-system.vercel.app",
+        "https://ramma-equipment-system-git-main-namans-projects-6f969b27.vercel.app",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
