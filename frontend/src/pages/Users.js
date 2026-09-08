@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import Layout from '../components/Layout';
 import StyledSelect from '../components/StyledSelect';
 import { getUsers, createUser, getRoles, deactivateUser, changeName, changeCode, changeRole } from '../services/api';
+import { getErrorMessage } from '../utils/errors';
 import * as ui from '../components/ui';
 
 export default function Users() {
@@ -50,7 +51,7 @@ export default function Users() {
             setForm({ full_name: '', username: '', password: '', employee_code: '', role_id: '' });
             loadUsers();
         } catch (err) {
-            setError(err.response?.data?.detail || 'Failed to create employee');
+            setError(getErrorMessage(err, 'Failed to create employee'));
         } finally {
             setLoading(false);
         }
@@ -65,7 +66,7 @@ export default function Users() {
             setConfirmId(null);
             loadUsers();
         } catch (err) {
-            setError(err.response?.data?.detail || 'Failed to remove employee');
+            setError(getErrorMessage(err, 'Failed to remove employee'));
             setConfirmId(null);
         }
     };
@@ -88,13 +89,24 @@ export default function Users() {
             setSuccess(res.data.message);
             setEdit(null);
             loadUsers();
+            // if the owner edited their own name, refresh stored user so sidebar updates
+            if (field === 'name' && userId === currentUser.user_id) {
+                const updated = { ...currentUser, full_name: value.trim() };
+                localStorage.setItem('user', JSON.stringify(updated));
+                window.location.reload();
+            }
         } catch (err) {
-            setError(err.response?.data?.detail || 'Failed to update');
+            setError(getErrorMessage(err, 'Failed to update'));
         }
     };
 
     const editing = (userId, field) => edit && edit.userId === userId && edit.field === field;
     const roleOptions = roles.map(r => ({ value: r.role_id, label: r.name }));
+
+    // Owner can edit anyone's name/code, including their own.
+    const canEditNameOrCode = (u) => isOwner;
+    // Role can't be changed for owner accounts (protects against locking yourself out).
+    const canEditRole = (u) => isOwner && u.role !== 'owner';
 
     return (
         <Layout>
@@ -156,7 +168,7 @@ export default function Users() {
                                             <button onClick={() => setEdit(null)} style={styles.cancelBtn}>×</button>
                                         </span>
                                     ) : (
-                                        <span>{u.full_name}{isOwner && u.role !== 'owner' && <button onClick={() => startEdit(u.user_id, 'name', u.full_name)} style={styles.editLink}>edit</button>}</span>
+                                        <span>{u.full_name}{canEditNameOrCode(u) && <button onClick={() => startEdit(u.user_id, 'name', u.full_name)} style={styles.editLink}>edit</button>}</span>
                                     )}
                                 </td>
                                 <td style={ui.td}>{u.username}</td>
@@ -168,7 +180,7 @@ export default function Users() {
                                             <button onClick={() => setEdit(null)} style={styles.cancelBtn}>×</button>
                                         </span>
                                     ) : (
-                                        <span>{u.employee_code || '-'}{isOwner && u.role !== 'owner' && <button onClick={() => startEdit(u.user_id, 'code', u.employee_code)} style={styles.editLink}>edit</button>}</span>
+                                        <span>{u.employee_code || '-'}{canEditNameOrCode(u) && <button onClick={() => startEdit(u.user_id, 'code', u.employee_code)} style={styles.editLink}>edit</button>}</span>
                                     )}
                                 </td>
                                 <td style={{ ...ui.td, textTransform: 'capitalize' }}>
@@ -181,7 +193,7 @@ export default function Users() {
                                             <button onClick={() => setEdit(null)} style={styles.cancelBtn}>×</button>
                                         </span>
                                     ) : (
-                                        <span>{u.role}{isOwner && u.role !== 'owner' && <button onClick={() => { const rid = roles.find(r => r.name === u.role)?.role_id; startEdit(u.user_id, 'role', rid); }} style={styles.editLink}>edit</button>}</span>
+                                        <span>{u.role}{canEditRole(u) && <button onClick={() => { const rid = roles.find(r => r.name === u.role)?.role_id; startEdit(u.user_id, 'role', rid); }} style={styles.editLink}>edit</button>}</span>
                                     )}
                                 </td>
                                 <td style={{ ...ui.td, textAlign: 'right' }}>
