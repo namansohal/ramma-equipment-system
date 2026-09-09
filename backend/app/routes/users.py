@@ -12,6 +12,8 @@ from app.permissions import require_admin
 
 router = APIRouter(prefix="/users", tags=["Users"])
 
+MIN_PASSWORD_LENGTH = 8
+
 
 class UsernameChange(BaseModel):
     new_username: str
@@ -27,6 +29,14 @@ class CodeChange(BaseModel):
 
 class RoleChange(BaseModel):
     new_role_id: int
+
+
+def _validate_password(password: str):
+    if not password or len(password) < MIN_PASSWORD_LENGTH:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Password must be at least {MIN_PASSWORD_LENGTH} characters long"
+        )
 
 
 @router.get("/", response_model=List[UserResponse])
@@ -54,13 +64,31 @@ def create_user(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin)
 ):
-    existing = db.query(User).filter(User.username == data.username).first()
+    _validate_password(data.password)
+
+    new_role = db.query(Role).filter(Role.role_id == data.role_id).first()
+    if not new_role:
+        raise HTTPException(status_code=404, detail="Role not found")
+
+    # Only an owner may create another owner account.
+    if new_role.name == "owner" and current_user.role.name != "owner":
+        raise HTTPException(status_code=403, detail="Only the owner can create an owner account")
+
+    # A manager cannot create another manager (prevents lateral privilege creation).
+    if new_role.name == "manager" and current_user.role.name != "owner":
+        raise HTTPException(status_code=403, detail="Only the owner can create a manager account")
+
+    username = data.username.strip().lower()
+    if not username:
+        raise HTTPException(status_code=400, detail="Username cannot be empty")
+
+    existing = db.query(User).filter(User.username == username).first()
     if existing:
         raise HTTPException(status_code=400, detail="Username already exists")
 
     user = User(
-        full_name=data.full_name,
-        username=data.username,
+        full_name=data.full_name.strip(),
+        username=username,
         password_hash=hash_password(data.password),
         employee_code=data.employee_code,
         role_id=data.role_id,
@@ -73,7 +101,7 @@ def create_user(
         table_name="users",
         record_id=user.user_id,
         action="CREATE",
-        new_value=f"username={data.username} role_id={data.role_id}",
+        new_value=f"username={username} role={new_role.name}",
         changed_by=current_user.user_id,
     ))
     db.commit()
@@ -100,7 +128,9 @@ def deactivate_user(
     if user.user_id == current_user.user_id:
         raise HTTPException(status_code=400, detail="You cannot deactivate your own account")
     if user.role.name == "owner":
-        raise HTTPException(status_code=400, detail="The owner account cannot be deactivated")
+        raise HTTPException(status_code=400, detail="An owner account cannot be deactivated")
+    if user.role.name == "manager" and current_user.role.name != "owner":
+        raise HTTPException(status_code=403, detail="Only the owner can remove a manager")
 
     user.active = False
     db.add(AuditLog(
@@ -121,7 +151,7 @@ def change_username(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    new = data.new_username.strip()
+    new = data.new_username.strip().lower()
     if not new:
         raise HTTPException(status_code=400, detail="Username cannot be empty")
 
@@ -172,6 +202,10 @@ def change_name(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
+    # An owner may edit their own record, but not another owner's.
+    if user.role.name == "owner" and user.user_id != current_user.user_id:
+        raise HTTPException(status_code=403, detail="You cannot edit another owner's account")
+
     new = data.new_name.strip()
     if not new:
         raise HTTPException(status_code=400, detail="Name cannot be empty")
@@ -205,6 +239,9 @@ def change_code(
     user = db.query(User).filter(User.user_id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+
+    if user.role.name == "owner" and user.user_id != current_user.user_id:
+        raise HTTPException(status_code=403, detail="You cannot edit another owner's account")
 
     new = (data.new_code or "").strip() or None
     if new:
@@ -243,11 +280,18 @@ def change_role(
         raise HTTPException(status_code=404, detail="User not found")
 
     if user.role.name == "owner":
-        raise HTTPException(status_code=400, detail="Cannot change the owner's role")
+        raise HTTPException(status_code=400, detail="An owner's role cannot be changed")
 
     new_role = db.query(Role).filter(Role.role_id == data.new_role_id).first()
     if not new_role:
         raise HTTPException(status_code=404, detail="Role not found")
+
+    # Nobody can be promoted to owner through this endpoint.
+    if new_role.name == "owner":
+        raise HTTPException(
+            status_code=403,
+            detail="Users cannot be promoted to owner. Owner accounts must be created deliberately."
+        )
 
     old_role = user.role.name
     user.role_id = data.new_role_id
@@ -282,6 +326,8 @@ def change_password(
 ):
     if not verify_password(data.old_password, current_user.password_hash):
         raise HTTPException(status_code=400, detail="Current password is incorrect")
+
+    _validate_password(data.new_password)
 
     current_user.password_hash = hash_password(data.new_password)
     db.add(AuditLog(
