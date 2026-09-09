@@ -11,7 +11,7 @@ from app.models.audit import AuditLog
 from app.schemas.expenses import ExpenseCreate, ExpenseEdit, ExpenseResponse
 from app.auth import get_current_user
 from app.models.users import User
-from app.permissions import require_admin
+from app.permissions import require_admin, require_editor
 from app.text_utils import smart_capitalize
 
 router = APIRouter(prefix="/expenses", tags=["Expenses"])
@@ -43,11 +43,16 @@ def _recompute_expense_balances(db: Session, location_id: int):
 def create_expense(
     data: ExpenseCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_editor)
 ):
     location = db.query(Location).filter(Location.is_current == True).first()
     if not location:
         raise HTTPException(status_code=400, detail="No current location set")
+
+    debit = float(data.debit or 0)
+    credit = float(data.credit or 0)
+    if debit < 0 or credit < 0:
+        raise HTTPException(status_code=400, detail="Amounts cannot be negative")
 
     is_common = len(data.machine_ids) == 0
 
@@ -92,6 +97,8 @@ def get_expenses(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    limit = min(limit, 500)
+
     location = db.query(Location).filter(Location.is_current == True).first()
     if not location:
         return []
@@ -138,6 +145,8 @@ def edit_expense(
             expense.description = new_desc
 
     if data.amount is not None:
+        if float(data.amount) < 0:
+            raise HTTPException(status_code=400, detail="Amount cannot be negative")
         was_debit = float(expense.debit or 0) > 0
         old_amount = float(expense.debit) if was_debit else float(expense.credit)
         if float(data.amount) != old_amount:
@@ -167,7 +176,7 @@ def edit_expense(
 def bulk_delete_expenses(
     data: BulkDelete,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_editor)
 ):
     if not data.ids:
         raise HTTPException(status_code=400, detail="No entries selected")
@@ -203,7 +212,7 @@ def bulk_delete_expenses(
 def delete_expense(
     expense_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_editor)
 ):
     expense = db.query(Expense).filter(Expense.expense_id == expense_id, Expense.deleted_at == None).first()
     if not expense:
