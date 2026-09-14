@@ -72,6 +72,14 @@ export const getUnreadAlertCount = () => API.get('/alerts/unread-count');
 export const markAlertRead = (id) => API.post(`/alerts/${id}/read`);
 export const deleteAlert = (id) => API.delete(`/alerts/${id}`);
 
+export const extractReceipt = (file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return API.post('/ai/extract-receipt', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+    });
+};
+
 export const currentUser = () => JSON.parse(localStorage.getItem('user') || '{}');
 export const isViewer = () => currentUser().role === 'viewer';
 export const isAdmin = () => ['owner', 'manager'].includes(currentUser().role);

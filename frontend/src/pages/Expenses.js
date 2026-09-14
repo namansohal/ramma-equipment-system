@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Layout from '../components/Layout';
 import PartPicker from '../components/PartPicker';
 import StyledSelect from '../components/StyledSelect';
 import DescriptionInput from '../components/DescriptionInput';
-import { createExpense, editExpense, getExpenses, getExpenseTypes, getMachines, deleteExpense, bulkDeleteExpenses, getParts, purchaseSparePart, isViewer, isAdmin } from '../services/api';
+import { createExpense, editExpense, getExpenses, getExpenseTypes, getMachines, deleteExpense, bulkDeleteExpenses, getParts, purchaseSparePart, extractReceipt, isViewer, isAdmin } from '../services/api';
 import { getErrorMessage } from '../utils/errors';
 import * as ui from '../components/ui';
 
@@ -15,6 +15,7 @@ export default function Expenses() {
     const [machines, setMachines] = useState([]);
     const [parts, setParts] = useState([]);
     const [loading, setLoading] = useState(false);
+    const [extracting, setExtracting] = useState(false);
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
     const [confirmId, setConfirmId] = useState(null);
@@ -22,6 +23,7 @@ export default function Expenses() {
     const [confirmBulk, setConfirmBulk] = useState(false);
     const [editing, setEditing] = useState(null);
     const [editForm, setEditForm] = useState({ txn_date: '', description: '', amount: '' });
+    const fileInputRef = useRef(null);
 
     const [form, setForm] = useState({
         txn_date: new Date().toISOString().split('T')[0],
@@ -74,6 +76,29 @@ export default function Expenses() {
     };
 
     const clearSelection = () => { setSelected(new Set()); setConfirmBulk(false); };
+
+    const handleReceiptUpload = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        setExtracting(true);
+        setError(''); setSuccess('');
+        try {
+            const res = await extractReceipt(file);
+            const { date, amount, description, vendor } = res.data;
+            setForm(f => ({
+                ...f,
+                txn_date: date || f.txn_date,
+                amount: amount != null ? String(amount) : f.amount,
+                description: description || (vendor ? `Payment to ${vendor}` : f.description),
+            }));
+            setSuccess('Details extracted from receipt — please review before saving.');
+        } catch (err) {
+            setError(getErrorMessage(err, 'Could not read the receipt. Try a clearer photo or enter manually.'));
+        } finally {
+            setExtracting(false);
+            if (fileInputRef.current) fileInputRef.current.value = '';
+        }
+    };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -178,6 +203,25 @@ export default function Expenses() {
                     <div style={ui.cardTitle}>New Expense</div>
                     {error && <div style={ui.alertError}>{error}</div>}
                     {success && <div style={ui.alertSuccess}>{success}</div>}
+
+                    {!showSparePart && (
+                        <div style={styles.uploadRow}>
+                            <input
+                                ref={fileInputRef}
+                                type="file"
+                                accept="image/*"
+                                capture="environment"
+                                onChange={handleReceiptUpload}
+                                style={{ display: 'none' }}
+                                id="receipt-upload"
+                            />
+                            <label htmlFor="receipt-upload" style={extracting ? styles.uploadBtnDisabled : styles.uploadBtn}>
+                                {extracting ? 'Reading receipt...' : '📷 Upload Receipt Photo'}
+                            </label>
+                            <span style={styles.uploadHint}>Auto-fills date, amount, description — review before saving</span>
+                        </div>
+                    )}
+
                     <form onSubmit={handleSubmit}>
                         <div style={ui.row2}>
                             <div style={ui.field}>
@@ -374,4 +418,8 @@ const styles = {
     editInput: { padding: '6px 8px', border: `0.5px solid ${ui.colors.borderStrong}`, borderRadius: '6px', fontSize: '13px', width: '110px' },
     editInputWide: { padding: '6px 8px', border: `0.5px solid ${ui.colors.borderStrong}`, borderRadius: '6px', fontSize: '13px', width: '100%' },
     cfBadge: { marginLeft: '8px', fontSize: '10px', fontWeight: '600', color: ui.colors.accent, backgroundColor: ui.colors.accentSoft, padding: '1px 6px', borderRadius: '10px' },
+    uploadRow: { display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '18px', padding: '12px', backgroundColor: '#f5f3f0', borderRadius: '8px' },
+    uploadBtn: { padding: '9px 16px', backgroundColor: ui.colors.ink, color: '#fff', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '500', whiteSpace: 'nowrap' },
+    uploadBtnDisabled: { padding: '9px 16px', backgroundColor: ui.colors.muted, color: '#fff', borderRadius: '8px', cursor: 'not-allowed', fontSize: '13px', fontWeight: '500', whiteSpace: 'nowrap' },
+    uploadHint: { fontSize: '12px', color: ui.colors.muted },
 };
