@@ -85,13 +85,30 @@ export default function Expenses() {
         try {
             const res = await extractReceipt(file);
             const { date, amount, description, vendor } = res.data;
-            setForm(f => ({
-                ...f,
-                txn_date: date || f.txn_date,
-                amount: amount != null ? String(amount) : f.amount,
-                description: description || (vendor ? `Payment to ${vendor}` : f.description),
-            }));
-            setSuccess('Details extracted from receipt — please review before saving.');
+
+            const gotNothing = date == null && amount == null && description == null && vendor == null;
+
+            if (gotNothing) {
+                setError('Could not read any details from that photo. Try a clearer, well-lit photo of a printed receipt, or enter the details manually.');
+            } else {
+                setForm(f => ({
+                    ...f,
+                    txn_date: date || f.txn_date,
+                    amount: amount != null ? String(amount) : f.amount,
+                    description: description || (vendor ? `Payment to ${vendor}` : f.description),
+                }));
+
+                const missing = [];
+                if (date == null) missing.push('date');
+                if (amount == null) missing.push('amount');
+                if (description == null && vendor == null) missing.push('description');
+
+                if (missing.length > 0) {
+                    setSuccess(`Extracted what was readable — could not find: ${missing.join(', ')}. Please fill those in and review the rest before saving.`);
+                } else {
+                    setSuccess('Details extracted from receipt — please review before saving.');
+                }
+            }
         } catch (err) {
             setError(getErrorMessage(err, 'Could not read the receipt. Try a clearer photo or enter manually.'));
         } finally {
