@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Layout from '../components/Layout';
 import StyledSelect from '../components/StyledSelect';
 import DescriptionInput from '../components/DescriptionInput';
-import { getMainbook, createMainbook, editMainbook, deleteMainbook, bulkDeleteMainbook, getMachines, isViewer, isAdmin } from '../services/api';
+import { getMainbook, createMainbook, editMainbook, deleteMainbook, bulkDeleteMainbook, getMachines, extractReceipt, isViewer, isAdmin } from '../services/api';
 import { getErrorMessage } from '../utils/errors';
 import * as ui from '../components/ui';
 
@@ -12,6 +12,7 @@ export default function Mainbook() {
     const [records, setRecords] = useState([]);
     const [machines, setMachines] = useState([]);
     const [loading, setLoading] = useState(false);
+    const [extracting, setExtracting] = useState(false);
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
     const [confirmId, setConfirmId] = useState(null);
@@ -20,6 +21,10 @@ export default function Mainbook() {
     const [confirmBulk, setConfirmBulk] = useState(false);
     const [editing, setEditing] = useState(null);
     const [editForm, setEditForm] = useState({ txn_date: '', description: '', amount: '' });
+    const fileInputRef = useRef(null);
+
+    const [reviewRows, setReviewRows] = useState(null);
+    const [savingReview, setSavingReview] = useState(false);
 
     const [form, setForm] = useState({
         txn_date: new Date().toISOString().split('T')[0],
@@ -63,6 +68,106 @@ export default function Mainbook() {
     };
 
     const clearSelection = () => { setSelected(new Set()); setConfirmBulk(false); };
+
+    const handleReceiptUpload = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        setExtracting(true);
+        setError(''); setSuccess(''); setReviewRows(null);
+        try {
+            const res = await extractReceipt(file);
+            const rows = res.data.rows || [];
+
+            if (rows.length === 0) {
+                setError('Could not read any details from that photo. Try a clearer, well-lit photo, or enter the details manually.');
+            } else {
+                const prepared = rows.map((r, i) => ({
+                    key: i,
+                    selected: true,
+                    date: r.date || new Date().toISOString().split('T')[0],
+                    description: r.description || '',
+                    amount: r.amount != null ? String(r.amount) : '',
+                    direction: r.direction === 'in' ? 'in' : 'out',
+                    destination: 'expense',
+                    missingFields: [
+                        !r.date && 'date',
+                        r.amount == null && 'amount',
+                        !r.description && 'description',
+                    ].filter(Boolean),
+                }));
+                setReviewRows(prepared);
+                setSuccess(`Found ${rows.length} line(s). Review, edit, and select which to add below.`);
+            }
+        } catch (err) {
+            setError(getErrorMessage(err, 'Could not read the receipt. Try a clearer photo or enter manually.'));
+        } finally {
+            setExtracting(false);
+            if (fileInputRef.current) fileInputRef.current.value = '';
+        }
+    };
+
+    const updateReviewRow = (key, field, value) => {
+        setReviewRows(rows => rows.map(r => r.key === key ? { ...r, [field]: value } : r));
+    };
+
+    const toggleReviewRow = (key) => {
+        setReviewRows(rows => rows.map(r => r.key === key ? { ...r, selected: !r.selected } : r));
+    };
+
+    const cancelReview = () => {
+        setReviewRows(null);
+        setSuccess('');
+    };
+
+    const saveReviewRows = async () => {
+        const toSave = reviewRows.filter(r => r.selected);
+        if (toSave.length === 0) {
+            setError('No rows selected to add');
+            return;
+        }
+        for (const r of toSave) {
+            if (!r.amount || parseFloat(r.amount) <= 0) {
+                setError('Every selected row needs a valid amount');
+                return;
+            }
+            if (r.direction === 'out' && !r.destination) {
+                setError('Every selected "Out" row needs a destination (Expense/Refund/MOMO)');
+                return;
+            }
+        }
+
+        setSavingReview(true);
+        setError(''); setSuccess('');
+        let successCount = 0;
+        let failCount = 0;
+
+        for (const r of toSave) {
+            try {
+                const amount = parseFloat(r.amount);
+                await createMainbook({
+                    txn_date: r.date,
+                    description: r.description || '(no description)',
+                    debit: r.direction === 'out' ? amount : 0,
+                    credit: r.direction === 'in' ? amount : 0,
+                    destination: r.direction === 'out' ? r.destination : null,
+                    machine_id: null,
+                    is_carry_forward: false,
+                });
+                successCount++;
+            } catch (err) {
+                failCount++;
+            }
+        }
+
+        setSavingReview(false);
+        setReviewRows(null);
+        if (failCount === 0) {
+            setSuccess(`${successCount} entry(ies) added successfully`);
+        } else {
+            setSuccess(`${successCount} added, ${failCount} failed — check and re-enter those manually`);
+        }
+        loadRecords();
+    };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -147,13 +252,107 @@ export default function Mainbook() {
         { value: 'momo', label: 'MOMO' },
     ];
 
+    const selectedReviewCount = reviewRows ? reviewRows.filter(r => r.selected).length : 0;
+
     return (
         <Layout>
             {!viewer && (
                 <div style={ui.card}>
                     <div style={ui.cardTitle}>New Mainbook Entry</div>
                     {error && <div style={ui.alertError}>{error}</div>}
-                    {success && <div style={ui.alertSuccess}>{success}</div>}
+                    {success && !reviewRows && <div style={ui.alertSuccess}>{success}</div>}
+
+                    <div style={styles.uploadRow}>
+                        <input
+                            ref={fileInputRef}
+                            type="file"
+                            accept="image/*"
+                            capture="environment"
+                            onChange={handleReceiptUpload}
+                            style={{ display: 'none' }}
+                            id="mainbook-receipt-upload"
+                        />
+                        <label htmlFor="mainbook-receipt-upload" style={extracting ? styles.uploadBtnDisabled : styles.uploadBtn}>
+                            {extracting ? 'Reading photo...' : '📷 Upload Receipt / Ledger Photo'}
+                        </label>
+                        <span style={styles.uploadHint}>Reads every line — review and pick which to add below</span>
+                    </div>
+
+                    {reviewRows && (
+                        <div style={styles.reviewBox}>
+                            <div style={styles.reviewHeader}>
+                                <div style={styles.reviewTitle}>{success}</div>
+                                <button onClick={cancelReview} style={styles.reviewCancelAll}>Discard All</button>
+                            </div>
+                            <div style={styles.reviewTable}>
+                                {reviewRows.map(r => (
+                                    <div key={r.key} style={r.selected ? styles.reviewRow : styles.reviewRowOff}>
+                                        <input type="checkbox" checked={r.selected} onChange={() => toggleReviewRow(r.key)} style={styles.reviewCheckbox} />
+                                        <input
+                                            type="date"
+                                            value={r.date}
+                                            onChange={ev => updateReviewRow(r.key, 'date', ev.target.value)}
+                                            style={styles.reviewDateInput}
+                                            disabled={!r.selected}
+                                        />
+                                        <input
+                                            type="text"
+                                            value={r.description}
+                                            onChange={ev => updateReviewRow(r.key, 'description', ev.target.value)}
+                                            style={styles.reviewDescInput}
+                                            placeholder="Description"
+                                            disabled={!r.selected}
+                                        />
+                                        <select
+                                            value={r.direction}
+                                            onChange={ev => updateReviewRow(r.key, 'direction', ev.target.value)}
+                                            style={styles.reviewDirSelect}
+                                            disabled={!r.selected}
+                                        >
+                                            <option value="out">Out</option>
+                                            <option value="in">In</option>
+                                        </select>
+                                        <input
+                                            type="number"
+                                            value={r.amount}
+                                            onChange={ev => updateReviewRow(r.key, 'amount', ev.target.value)}
+                                            style={styles.reviewAmountInput}
+                                            placeholder="Amount"
+                                            min="0"
+                                            step="0.01"
+                                            disabled={!r.selected}
+                                        />
+                                        {r.direction === 'out' && (
+                                            <select
+                                                value={r.destination}
+                                                onChange={ev => updateReviewRow(r.key, 'destination', ev.target.value)}
+                                                style={styles.reviewDestSelect}
+                                                disabled={!r.selected}
+                                            >
+                                                <option value="expense">Expense</option>
+                                                <option value="refund">Refund</option>
+                                                <option value="momo">MOMO</option>
+                                            </select>
+                                        )}
+                                        {r.missingFields.length > 0 && r.selected && (
+                                            <span style={styles.reviewMissing} title={`Could not read: ${r.missingFields.join(', ')}`}>⚠</span>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                            <div style={styles.reviewFooter}>
+                                <span style={styles.reviewCount}>{selectedReviewCount} of {reviewRows.length} selected</span>
+                                <button
+                                    onClick={saveReviewRows}
+                                    style={savingReview ? ui.btnDisabled : ui.btn}
+                                    disabled={savingReview}
+                                >
+                                    {savingReview ? 'Adding...' : `Add ${selectedReviewCount} Selected`}
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
                     <form onSubmit={handleSubmit}>
                         <div style={ui.row2}>
                             <div style={ui.field}>
@@ -343,4 +542,24 @@ const styles = {
     editInput: { padding: '6px 8px', border: `0.5px solid ${ui.colors.borderStrong}`, borderRadius: '6px', fontSize: '13px', width: '110px' },
     editInputWide: { padding: '6px 8px', border: `0.5px solid ${ui.colors.borderStrong}`, borderRadius: '6px', fontSize: '13px', width: '100%' },
     cfBadge: { marginLeft: '8px', fontSize: '10px', fontWeight: '600', color: ui.colors.accent, backgroundColor: ui.colors.accentSoft, padding: '1px 6px', borderRadius: '10px' },
+    uploadRow: { display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '18px', padding: '12px', backgroundColor: '#f5f3f0', borderRadius: '8px' },
+    uploadBtn: { padding: '9px 16px', backgroundColor: ui.colors.ink, color: '#fff', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '500', whiteSpace: 'nowrap' },
+    uploadBtnDisabled: { padding: '9px 16px', backgroundColor: ui.colors.muted, color: '#fff', borderRadius: '8px', cursor: 'not-allowed', fontSize: '13px', fontWeight: '500', whiteSpace: 'nowrap' },
+    uploadHint: { fontSize: '12px', color: ui.colors.muted },
+    reviewBox: { border: `1px solid ${ui.colors.accent}`, borderRadius: '10px', padding: '16px', marginBottom: '20px', backgroundColor: '#fffaf8' },
+    reviewHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' },
+    reviewTitle: { fontSize: '13px', fontWeight: '500', color: ui.colors.ink },
+    reviewCancelAll: { padding: '5px 12px', backgroundColor: '#fff', color: ui.colors.inkSoft, border: `0.5px solid ${ui.colors.borderStrong}`, borderRadius: '6px', cursor: 'pointer', fontSize: '12px' },
+    reviewTable: { display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '420px', overflowY: 'auto', marginBottom: '14px' },
+    reviewRow: { display: 'flex', gap: '8px', alignItems: 'center', padding: '8px', backgroundColor: '#fff', borderRadius: '8px', border: `0.5px solid ${ui.colors.border}` },
+    reviewRowOff: { display: 'flex', gap: '8px', alignItems: 'center', padding: '8px', backgroundColor: '#f5f3f0', borderRadius: '8px', border: `0.5px solid ${ui.colors.border}`, opacity: 0.55 },
+    reviewCheckbox: { flexShrink: 0 },
+    reviewDateInput: { padding: '6px 8px', border: `0.5px solid ${ui.colors.borderStrong}`, borderRadius: '6px', fontSize: '12px', width: '130px', flexShrink: 0 },
+    reviewDescInput: { padding: '6px 8px', border: `0.5px solid ${ui.colors.borderStrong}`, borderRadius: '6px', fontSize: '12px', flex: 1, minWidth: '120px' },
+    reviewDirSelect: { padding: '6px 8px', border: `0.5px solid ${ui.colors.borderStrong}`, borderRadius: '6px', fontSize: '12px', width: '70px', flexShrink: 0 },
+    reviewAmountInput: { padding: '6px 8px', border: `0.5px solid ${ui.colors.borderStrong}`, borderRadius: '6px', fontSize: '12px', width: '100px', flexShrink: 0 },
+    reviewDestSelect: { padding: '6px 8px', border: `0.5px solid ${ui.colors.borderStrong}`, borderRadius: '6px', fontSize: '12px', width: '100px', flexShrink: 0 },
+    reviewMissing: { color: ui.colors.accent, fontSize: '14px', flexShrink: 0 },
+    reviewFooter: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
+    reviewCount: { fontSize: '12px', color: ui.colors.muted },
 };
