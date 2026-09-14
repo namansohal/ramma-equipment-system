@@ -38,7 +38,7 @@ Extract the following fields and return ONLY valid JSON, no markdown, no explana
 If you cannot confidently read a field, set it to null. Do not guess."""
 
         response = client.models.generate_content(
-            model="gemini-2.0-flash",
+            model="gemini-3.6-flash",
             contents=[
                 {"inline_data": {"mime_type": file.content_type or "image/jpeg", "data": base64.b64encode(contents).decode("utf-8")}},
                 {"text": prompt},
