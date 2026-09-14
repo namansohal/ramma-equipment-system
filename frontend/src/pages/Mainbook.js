@@ -89,6 +89,9 @@ export default function Mainbook() {
                     amount: r.amount != null ? String(r.amount) : '',
                     direction: r.direction === 'in' ? 'in' : 'out',
                     destination: 'expense',
+                    is_carry_forward: false,
+                    for_machine: false,
+                    machine_id: '',
                     missingFields: [
                         !r.date && 'date',
                         r.amount == null && 'amount',
@@ -134,6 +137,10 @@ export default function Mainbook() {
                 setError('Every selected "Out" row needs a destination (Expense/Refund/MOMO)');
                 return;
             }
+            if (r.direction === 'in' && r.for_machine && !r.machine_id) {
+                setError('A row marked "for a machine" needs a machine selected');
+                return;
+            }
         }
 
         setSavingReview(true);
@@ -150,8 +157,8 @@ export default function Mainbook() {
                     debit: r.direction === 'out' ? amount : 0,
                     credit: r.direction === 'in' ? amount : 0,
                     destination: r.direction === 'out' ? r.destination : null,
-                    machine_id: null,
-                    is_carry_forward: false,
+                    machine_id: (r.direction === 'in' && r.for_machine && r.machine_id) ? parseInt(r.machine_id) : null,
+                    is_carry_forward: r.is_carry_forward,
                 });
                 successCount++;
             } catch (err) {
@@ -286,56 +293,85 @@ export default function Mainbook() {
                             </div>
                             <div style={styles.reviewTable}>
                                 {reviewRows.map(r => (
-                                    <div key={r.key} style={r.selected ? styles.reviewRow : styles.reviewRowOff}>
-                                        <input type="checkbox" checked={r.selected} onChange={() => toggleReviewRow(r.key)} style={styles.reviewCheckbox} />
-                                        <input
-                                            type="date"
-                                            value={r.date}
-                                            onChange={ev => updateReviewRow(r.key, 'date', ev.target.value)}
-                                            style={styles.reviewDateInput}
-                                            disabled={!r.selected}
-                                        />
-                                        <input
-                                            type="text"
-                                            value={r.description}
-                                            onChange={ev => updateReviewRow(r.key, 'description', ev.target.value)}
-                                            style={styles.reviewDescInput}
-                                            placeholder="Description"
-                                            disabled={!r.selected}
-                                        />
-                                        <select
-                                            value={r.direction}
-                                            onChange={ev => updateReviewRow(r.key, 'direction', ev.target.value)}
-                                            style={styles.reviewDirSelect}
-                                            disabled={!r.selected}
-                                        >
-                                            <option value="out">Out</option>
-                                            <option value="in">In</option>
-                                        </select>
-                                        <input
-                                            type="number"
-                                            value={r.amount}
-                                            onChange={ev => updateReviewRow(r.key, 'amount', ev.target.value)}
-                                            style={styles.reviewAmountInput}
-                                            placeholder="Amount"
-                                            min="0"
-                                            step="0.01"
-                                            disabled={!r.selected}
-                                        />
-                                        {r.direction === 'out' && (
+                                    <div key={r.key} style={r.selected ? styles.reviewRowWrap : styles.reviewRowWrapOff}>
+                                        <div style={styles.reviewRowMain}>
+                                            <input type="checkbox" checked={r.selected} onChange={() => toggleReviewRow(r.key)} style={styles.reviewCheckbox} />
+                                            <input
+                                                type="date"
+                                                value={r.date}
+                                                onChange={ev => updateReviewRow(r.key, 'date', ev.target.value)}
+                                                style={styles.reviewDateInput}
+                                                disabled={!r.selected}
+                                            />
+                                            <input
+                                                type="text"
+                                                value={r.description}
+                                                onChange={ev => updateReviewRow(r.key, 'description', ev.target.value)}
+                                                style={styles.reviewDescInput}
+                                                placeholder="Description"
+                                                disabled={!r.selected}
+                                            />
                                             <select
-                                                value={r.destination}
-                                                onChange={ev => updateReviewRow(r.key, 'destination', ev.target.value)}
-                                                style={styles.reviewDestSelect}
+                                                value={r.direction}
+                                                onChange={ev => updateReviewRow(r.key, 'direction', ev.target.value)}
+                                                style={styles.reviewDirSelect}
                                                 disabled={!r.selected}
                                             >
-                                                <option value="expense">Expense</option>
-                                                <option value="refund">Refund</option>
-                                                <option value="momo">MOMO</option>
+                                                <option value="out">Out</option>
+                                                <option value="in">In</option>
                                             </select>
-                                        )}
-                                        {r.missingFields.length > 0 && r.selected && (
-                                            <span style={styles.reviewMissing} title={`Could not read: ${r.missingFields.join(', ')}`}>⚠</span>
+                                            <input
+                                                type="number"
+                                                value={r.amount}
+                                                onChange={ev => updateReviewRow(r.key, 'amount', ev.target.value)}
+                                                style={styles.reviewAmountInput}
+                                                placeholder="Amount"
+                                                min="0"
+                                                step="0.01"
+                                                disabled={!r.selected}
+                                            />
+                                            {r.direction === 'out' && (
+                                                <select
+                                                    value={r.destination}
+                                                    onChange={ev => updateReviewRow(r.key, 'destination', ev.target.value)}
+                                                    style={styles.reviewDestSelect}
+                                                    disabled={!r.selected}
+                                                >
+                                                    <option value="expense">Expense</option>
+                                                    <option value="refund">Refund</option>
+                                                    <option value="momo">MOMO</option>
+                                                </select>
+                                            )}
+                                            {r.missingFields.length > 0 && r.selected && (
+                                                <span style={styles.reviewMissing} title={`Could not read: ${r.missingFields.join(', ')}`}>⚠</span>
+                                            )}
+                                        </div>
+                                        {r.selected && (
+                                            <div style={styles.reviewRowExtras}>
+                                                <label style={styles.reviewExtraLabel}>
+                                                    <input type="checkbox" checked={r.is_carry_forward} onChange={ev => updateReviewRow(r.key, 'is_carry_forward', ev.target.checked)} />
+                                                    Carry Forward
+                                                </label>
+                                                {r.direction === 'in' && (
+                                                    <label style={styles.reviewExtraLabel}>
+                                                        <input type="checkbox" checked={r.for_machine} onChange={ev => updateReviewRow(r.key, 'for_machine', ev.target.checked)} />
+                                                        For a machine
+                                                    </label>
+                                                )}
+                                                {r.direction === 'in' && r.for_machine && (
+                                                    <div style={styles.reviewMachineChips}>
+                                                        {machines.map(m => (
+                                                            <span
+                                                                key={m.machine_id}
+                                                                onClick={() => updateReviewRow(r.key, 'machine_id', m.machine_id)}
+                                                                style={r.machine_id === m.machine_id ? styles.reviewChipActive : styles.reviewChip}
+                                                            >
+                                                                {m.code}
+                                                            </span>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
                                         )}
                                     </div>
                                 ))}
@@ -550,9 +586,10 @@ const styles = {
     reviewHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' },
     reviewTitle: { fontSize: '13px', fontWeight: '500', color: ui.colors.ink },
     reviewCancelAll: { padding: '5px 12px', backgroundColor: '#fff', color: ui.colors.inkSoft, border: `0.5px solid ${ui.colors.borderStrong}`, borderRadius: '6px', cursor: 'pointer', fontSize: '12px' },
-    reviewTable: { display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '420px', overflowY: 'auto', marginBottom: '14px' },
-    reviewRow: { display: 'flex', gap: '8px', alignItems: 'center', padding: '8px', backgroundColor: '#fff', borderRadius: '8px', border: `0.5px solid ${ui.colors.border}` },
-    reviewRowOff: { display: 'flex', gap: '8px', alignItems: 'center', padding: '8px', backgroundColor: '#f5f3f0', borderRadius: '8px', border: `0.5px solid ${ui.colors.border}`, opacity: 0.55 },
+    reviewTable: { display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '460px', overflowY: 'auto', marginBottom: '14px' },
+    reviewRowWrap: { backgroundColor: '#fff', borderRadius: '8px', border: `0.5px solid ${ui.colors.border}`, padding: '8px' },
+    reviewRowWrapOff: { backgroundColor: '#f5f3f0', borderRadius: '8px', border: `0.5px solid ${ui.colors.border}`, padding: '8px', opacity: 0.55 },
+    reviewRowMain: { display: 'flex', gap: '8px', alignItems: 'center' },
     reviewCheckbox: { flexShrink: 0 },
     reviewDateInput: { padding: '6px 8px', border: `0.5px solid ${ui.colors.borderStrong}`, borderRadius: '6px', fontSize: '12px', width: '130px', flexShrink: 0 },
     reviewDescInput: { padding: '6px 8px', border: `0.5px solid ${ui.colors.borderStrong}`, borderRadius: '6px', fontSize: '12px', flex: 1, minWidth: '120px' },
@@ -560,6 +597,11 @@ const styles = {
     reviewAmountInput: { padding: '6px 8px', border: `0.5px solid ${ui.colors.borderStrong}`, borderRadius: '6px', fontSize: '12px', width: '100px', flexShrink: 0 },
     reviewDestSelect: { padding: '6px 8px', border: `0.5px solid ${ui.colors.borderStrong}`, borderRadius: '6px', fontSize: '12px', width: '100px', flexShrink: 0 },
     reviewMissing: { color: ui.colors.accent, fontSize: '14px', flexShrink: 0 },
+    reviewRowExtras: { display: 'flex', alignItems: 'center', gap: '16px', marginTop: '8px', paddingLeft: '26px', flexWrap: 'wrap' },
+    reviewExtraLabel: { display: 'flex', alignItems: 'center', gap: '5px', fontSize: '12px', color: ui.colors.inkSoft, cursor: 'pointer', whiteSpace: 'nowrap' },
+    reviewMachineChips: { display: 'flex', flexWrap: 'wrap', gap: '5px' },
+    reviewChip: { padding: '3px 10px', border: `0.5px solid ${ui.colors.borderStrong}`, borderRadius: '20px', cursor: 'pointer', backgroundColor: '#fff', fontSize: '11px', color: ui.colors.ink },
+    reviewChipActive: { padding: '3px 10px', border: `0.5px solid ${ui.colors.accent}`, borderRadius: '20px', cursor: 'pointer', backgroundColor: ui.colors.accentSoft, color: ui.colors.accent, fontSize: '11px', fontWeight: '500' },
     reviewFooter: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
     reviewCount: { fontSize: '12px', color: ui.colors.muted },
 };
