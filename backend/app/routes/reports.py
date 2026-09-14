@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func, case
@@ -15,6 +15,7 @@ from app.models.spare_parts import SparePart
 from app.models.machines import Machine
 from app.auth import get_current_user
 from app.models.users import User
+from app.permissions import require_admin
 
 router = APIRouter(prefix="/reports", tags=["Reports"])
 
@@ -28,13 +29,14 @@ def date_filter(query, model_date, from_date, to_date):
 
 
 # ---------- JSON data endpoints (for on-screen preview) ----------
+# All report endpoints require owner/manager (require_admin) — viewers have no report access at all.
 
 @router.get("/expenses")
 def expense_report(
     from_date: Optional[date] = None,
     to_date: Optional[date] = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_admin)
 ):
     q = db.query(Expense).filter(Expense.deleted_at == None)
     q = date_filter(q, Expense.txn_date, from_date, to_date)
@@ -56,7 +58,7 @@ def machine_cost_report(
     from_date: Optional[date] = None,
     to_date: Optional[date] = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_admin)
 ):
     q = db.query(
         Machine.code,
@@ -74,7 +76,7 @@ def machine_cost_report(
 @router.get("/stock")
 def stock_report(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_admin)
 ):
     results = db.query(
         StockTransaction.part_id,
@@ -90,7 +92,7 @@ def mainbook_report(
     from_date: Optional[date] = None,
     to_date: Optional[date] = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_admin)
 ):
     q = db.query(MainbookTransaction).filter(MainbookTransaction.deleted_at == None)
     q = date_filter(q, MainbookTransaction.txn_date, from_date, to_date)
@@ -145,7 +147,7 @@ def export_report(
     from_date: Optional[date] = None,
     to_date: Optional[date] = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_admin)
 ):
     if report_type == "expenses":
         data = expense_report(from_date, to_date, db, current_user)
@@ -176,7 +178,6 @@ def export_report(
         fname = "mainbook_report.xlsx"
 
     else:
-        from fastapi import HTTPException
         raise HTTPException(status_code=400, detail="Unknown report type")
 
     return StreamingResponse(
