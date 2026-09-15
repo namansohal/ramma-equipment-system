@@ -7,7 +7,6 @@ from app.models.stock import StockTransaction
 from app.models.spare_parts import SparePart
 from app.models.machines import Machine
 from app.models.locations import Location
-from app.models.machine_costs import MachinePartCost
 from app.models.audit import AuditLog
 from app.schemas.stock import StockTransactionCreate, StockTransactionResponse
 from app.auth import get_current_user
@@ -25,6 +24,21 @@ def create_stock_transaction(
 ):
     if data.direction not in ("IN", "OUT"):
         raise HTTPException(status_code=400, detail="Direction must be IN or OUT")
+
+    if data.quantity is None or data.quantity <= 0:
+        raise HTTPException(status_code=400, detail="Quantity must be greater than zero")
+
+    # Lock this part's row for the duration of the transaction so that concurrent
+    # requests for the SAME part are serialized — the second request waits until
+    # the first fully commits, then sees the updated stock before proceeding.
+    # This closes the race condition where two simultaneous OUT requests could
+    # both pass the availability check before either was recorded.
+    part = db.query(SparePart).filter(
+        SparePart.part_id == data.part_id
+    ).with_for_update().first()
+
+    if not part:
+        raise HTTPException(status_code=404, detail="Part not found")
 
     if data.direction == "OUT":
         current = db.query(
@@ -58,30 +72,6 @@ def create_stock_transaction(
     )
     db.add(txn)
     db.flush()
-
-    # When issuing a part OUT to a machine, attribute its cost using the
-    # most recent purchase (IN) price for that part.
-    if data.direction == "OUT" and data.machine_id:
-        last_purchase = db.query(StockTransaction).filter(
-            StockTransaction.part_id == data.part_id,
-            StockTransaction.direction == "IN",
-            StockTransaction.deleted_at == None,
-            StockTransaction.unit_price.isnot(None)
-        ).order_by(StockTransaction.txn_date.desc(), StockTransaction.stock_txn_id.desc()).first()
-
-        if last_purchase and last_purchase.unit_price:
-            unit_price = float(last_purchase.unit_price)
-            total_cost = round(unit_price * float(data.quantity), 2)
-
-            db.add(MachinePartCost(
-                machine_id=data.machine_id,
-                part_id=data.part_id,
-                stock_txn_id=txn.stock_txn_id,
-                quantity=data.quantity,
-                unit_price=unit_price,
-                total_cost=total_cost,
-                txn_date=data.txn_date,
-            ))
 
     db.add(AuditLog(
         table_name="stock_transactions",
@@ -124,9 +114,11 @@ def stock_history(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    limit = 100
+
     txns = db.query(StockTransaction).filter(
         StockTransaction.deleted_at == None
-    ).order_by(StockTransaction.stock_txn_id.desc()).limit(100).all()
+    ).order_by(StockTransaction.stock_txn_id.desc()).limit(limit).all()
 
     parts = {p.part_id: p.name for p in db.query(SparePart).all()}
     machines = {m.machine_id: m.code for m in db.query(Machine).all()}
@@ -159,9 +151,6 @@ def delete_stock_transaction(
 
     txn.deleted_at = datetime.utcnow()
     txn.deleted_by = current_user.user_id
-
-    # remove any attributed machine cost tied to this transaction
-    db.query(MachinePartCost).filter(MachinePartCost.stock_txn_id == stock_txn_id).delete()
 
     db.add(AuditLog(
         table_name="stock_transactions",
