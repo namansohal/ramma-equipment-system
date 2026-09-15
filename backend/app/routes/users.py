@@ -70,11 +70,9 @@ def create_user(
     if not new_role:
         raise HTTPException(status_code=404, detail="Role not found")
 
-    # Only an owner may create another owner account.
     if new_role.name == "owner" and current_user.role.name != "owner":
         raise HTTPException(status_code=403, detail="Only the owner can create an owner account")
 
-    # A manager cannot create another manager (prevents lateral privilege creation).
     if new_role.name == "manager" and current_user.role.name != "owner":
         raise HTTPException(status_code=403, detail="Only the owner can create a manager account")
 
@@ -82,7 +80,9 @@ def create_user(
     if not username:
         raise HTTPException(status_code=400, detail="Username cannot be empty")
 
-    existing = db.query(User).filter(User.username == username).first()
+    # Only active users block a username. A deactivated (removed) employee's
+    # username becomes available for reuse by a new employee.
+    existing = db.query(User).filter(User.username == username, User.active == True).first()
     if existing:
         raise HTTPException(status_code=400, detail="Username already exists")
 
@@ -155,7 +155,7 @@ def change_username(
     if not new:
         raise HTTPException(status_code=400, detail="Username cannot be empty")
 
-    taken = db.query(User).filter(User.username == new, User.user_id != current_user.user_id).first()
+    taken = db.query(User).filter(User.username == new, User.user_id != current_user.user_id, User.active == True).first()
     if taken:
         raise HTTPException(status_code=400, detail="Username already taken")
 
@@ -202,7 +202,6 @@ def change_name(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    # An owner may edit their own record, but not another owner's.
     if user.role.name == "owner" and user.user_id != current_user.user_id:
         raise HTTPException(status_code=403, detail="You cannot edit another owner's account")
 
@@ -245,7 +244,7 @@ def change_code(
 
     new = (data.new_code or "").strip() or None
     if new:
-        taken = db.query(User).filter(User.employee_code == new, User.user_id != user_id).first()
+        taken = db.query(User).filter(User.employee_code == new, User.user_id != user_id, User.active == True).first()
         if taken:
             raise HTTPException(status_code=400, detail="That code is already used by another employee")
 
@@ -286,7 +285,6 @@ def change_role(
     if not new_role:
         raise HTTPException(status_code=404, detail="Role not found")
 
-    # Nobody can be promoted to owner through this endpoint.
     if new_role.name == "owner":
         raise HTTPException(
             status_code=403,
