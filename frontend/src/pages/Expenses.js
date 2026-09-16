@@ -56,6 +56,11 @@ export default function Expenses() {
     const showMachinePicker = typeCode === 'machine';
     const showSparePart = typeCode === 'spare_part';
 
+    const machineTypeId = () => {
+        const m = types.find(t => t.code === 'machine');
+        return m ? m.type_id : null;
+    };
+
     const handleChange = (e) => {
         const { name, value } = e.target;
         setForm(f => ({ ...f, [name]: value }));
@@ -105,6 +110,7 @@ export default function Expenses() {
                     amount: r.amount != null ? String(r.amount) : '',
                     direction: r.direction === 'in' ? 'in' : 'out',
                     expense_type_id: defaultTypeId(),
+                    machine_ids: [],
                     missingFields: [
                         !r.date && 'date',
                         r.amount == null && 'amount',
@@ -126,6 +132,14 @@ export default function Expenses() {
         setReviewRows(rows => rows.map(r => r.key === key ? { ...r, [field]: value } : r));
     };
 
+    const toggleReviewRowMachine = (key, machineId) => {
+        setReviewRows(rows => rows.map(r => {
+            if (r.key !== key) return r;
+            const has = r.machine_ids.includes(machineId);
+            return { ...r, machine_ids: has ? r.machine_ids.filter(m => m !== machineId) : [...r.machine_ids, machineId] };
+        }));
+    };
+
     const toggleReviewRow = (key) => {
         setReviewRows(rows => rows.map(r => r.key === key ? { ...r, selected: !r.selected } : r));
     };
@@ -141,6 +155,7 @@ export default function Expenses() {
             setError('No rows selected to add');
             return;
         }
+        const machineTid = machineTypeId();
         for (const r of toSave) {
             if (!r.expense_type_id) {
                 setError('Every selected row needs a Type chosen');
@@ -148,6 +163,10 @@ export default function Expenses() {
             }
             if (!r.amount || parseFloat(r.amount) <= 0) {
                 setError('Every selected row needs a valid amount');
+                return;
+            }
+            if (machineTid && parseInt(r.expense_type_id) === machineTid && r.machine_ids.length === 0) {
+                setError('A row typed as "Machine" needs at least one machine selected');
                 return;
             }
         }
@@ -166,7 +185,7 @@ export default function Expenses() {
                     expense_type_id: parseInt(r.expense_type_id),
                     debit: r.direction === 'out' ? amount : 0,
                     credit: r.direction === 'in' ? amount : 0,
-                    machine_ids: [],
+                    machine_ids: r.machine_ids || [],
                     is_carry_forward: false,
                 });
                 successCount++;
@@ -282,6 +301,7 @@ export default function Expenses() {
     ];
 
     const selectedReviewCount = reviewRows ? reviewRows.filter(r => r.selected).length : 0;
+    const machineTid = machineTypeId();
 
     return (
         <Layout>
@@ -317,52 +337,70 @@ export default function Expenses() {
                             </div>
                             <div style={styles.reviewTable}>
                                 {reviewRows.map(r => (
-                                    <div key={r.key} style={r.selected ? styles.reviewRow : styles.reviewRowOff}>
-                                        <input type="checkbox" checked={r.selected} onChange={() => toggleReviewRow(r.key)} style={styles.reviewCheckbox} />
-                                        <input
-                                            type="date"
-                                            value={r.date}
-                                            onChange={ev => updateReviewRow(r.key, 'date', ev.target.value)}
-                                            style={styles.reviewDateInput}
-                                            disabled={!r.selected}
-                                        />
-                                        <input
-                                            type="text"
-                                            value={r.description}
-                                            onChange={ev => updateReviewRow(r.key, 'description', ev.target.value)}
-                                            style={styles.reviewDescInput}
-                                            placeholder="Description"
-                                            disabled={!r.selected}
-                                        />
-                                        <select
-                                            value={r.direction}
-                                            onChange={ev => updateReviewRow(r.key, 'direction', ev.target.value)}
-                                            style={styles.reviewDirSelect}
-                                            disabled={!r.selected}
-                                        >
-                                            <option value="out">Out</option>
-                                            <option value="in">In</option>
-                                        </select>
-                                        <input
-                                            type="number"
-                                            value={r.amount}
-                                            onChange={ev => updateReviewRow(r.key, 'amount', ev.target.value)}
-                                            style={styles.reviewAmountInput}
-                                            placeholder="Amount"
-                                            min="0"
-                                            step="0.01"
-                                            disabled={!r.selected}
-                                        />
-                                        <div style={styles.reviewTypeWrap}>
-                                            <StyledSelect
-                                                options={typeOptions}
-                                                value={r.expense_type_id}
-                                                onChange={(v) => updateReviewRow(r.key, 'expense_type_id', v)}
-                                                placeholder="Type"
+                                    <div key={r.key} style={r.selected ? styles.reviewRowWrap : styles.reviewRowWrapOff}>
+                                        <div style={styles.reviewRowMain}>
+                                            <input type="checkbox" checked={r.selected} onChange={() => toggleReviewRow(r.key)} style={styles.reviewCheckbox} />
+                                            <input
+                                                type="date"
+                                                value={r.date}
+                                                onChange={ev => updateReviewRow(r.key, 'date', ev.target.value)}
+                                                style={styles.reviewDateInput}
+                                                disabled={!r.selected}
                                             />
+                                            <input
+                                                type="text"
+                                                value={r.description}
+                                                onChange={ev => updateReviewRow(r.key, 'description', ev.target.value)}
+                                                style={styles.reviewDescInput}
+                                                placeholder="Description"
+                                                disabled={!r.selected}
+                                            />
+                                            <select
+                                                value={r.direction}
+                                                onChange={ev => updateReviewRow(r.key, 'direction', ev.target.value)}
+                                                style={styles.reviewDirSelect}
+                                                disabled={!r.selected}
+                                            >
+                                                <option value="out">Out</option>
+                                                <option value="in">In</option>
+                                            </select>
+                                            <input
+                                                type="number"
+                                                value={r.amount}
+                                                onChange={ev => updateReviewRow(r.key, 'amount', ev.target.value)}
+                                                style={styles.reviewAmountInput}
+                                                placeholder="Amount"
+                                                min="0"
+                                                step="0.01"
+                                                disabled={!r.selected}
+                                            />
+                                            <div style={styles.reviewTypeWrap}>
+                                                <StyledSelect
+                                                    options={typeOptions}
+                                                    value={r.expense_type_id}
+                                                    onChange={(v) => updateReviewRow(r.key, 'expense_type_id', v)}
+                                                    placeholder="Type"
+                                                />
+                                            </div>
+                                            {r.missingFields.length > 0 && r.selected && (
+                                                <span style={styles.reviewMissing} title={`Could not read: ${r.missingFields.join(', ')}`}>⚠</span>
+                                            )}
                                         </div>
-                                        {r.missingFields.length > 0 && r.selected && (
-                                            <span style={styles.reviewMissing} title={`Could not read: ${r.missingFields.join(', ')}`}>⚠</span>
+                                        {r.selected && machineTid && parseInt(r.expense_type_id) === machineTid && (
+                                            <div style={styles.reviewRowExtras}>
+                                                <span style={styles.reviewExtraLabel}>Which machine?</span>
+                                                <div style={styles.reviewMachineChips}>
+                                                    {machines.map(m => (
+                                                        <span
+                                                            key={m.machine_id}
+                                                            onClick={() => toggleReviewRowMachine(r.key, m.machine_id)}
+                                                            style={r.machine_ids.includes(m.machine_id) ? styles.reviewChipActive : styles.reviewChip}
+                                                        >
+                                                            {m.code}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            </div>
                                         )}
                                     </div>
                                 ))}
@@ -408,14 +446,14 @@ export default function Expenses() {
 
                         {showSparePart ? (
                             <>
-                                <div style={styles.hint}>Enter the price of ONE item — total is calculated automatically. This adds the part to stock and records the expense together.</div>
+                                <div style={styles.hint}>This records the expense against a catalog part for reference only — it does NOT change stock. Use the Spare Parts page to issue or receive stock.</div>
                                 <div style={ui.row2}>
                                     <div style={ui.field}>
                                         <label style={ui.label}>Part</label>
                                         <PartPicker parts={parts} value={form.part_id ? parseInt(form.part_id) : ''} onChange={(id) => setForm(f => ({ ...f, part_id: id }))} />
                                     </div>
                                     <div style={ui.field}>
-                                        <label style={ui.label}>Quantity Bought</label>
+                                        <label style={ui.label}>Quantity</label>
                                         <input style={ui.input} type="number" name="quantity" value={form.quantity} onChange={handleChange} min="0" step="0.01" required />
                                     </div>
                                 </div>
@@ -459,7 +497,7 @@ export default function Expenses() {
                         )}
 
                         <button style={loading ? ui.btnDisabled : ui.btn} type="submit" disabled={loading}>
-                            {loading ? 'Saving...' : (showSparePart ? 'Record Purchase' : 'Save Expense')}
+                            {loading ? 'Saving...' : (showSparePart ? 'Record (data only)' : 'Save Expense')}
                         </button>
                     </form>
                 </div>
@@ -584,9 +622,10 @@ const styles = {
     reviewHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' },
     reviewTitle: { fontSize: '13px', fontWeight: '500', color: ui.colors.ink },
     reviewCancelAll: { padding: '5px 12px', backgroundColor: '#fff', color: ui.colors.inkSoft, border: `0.5px solid ${ui.colors.borderStrong}`, borderRadius: '6px', cursor: 'pointer', fontSize: '12px' },
-    reviewTable: { display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '420px', overflowY: 'auto', marginBottom: '14px' },
-    reviewRow: { display: 'flex', gap: '8px', alignItems: 'center', padding: '8px', backgroundColor: '#fff', borderRadius: '8px', border: `0.5px solid ${ui.colors.border}` },
-    reviewRowOff: { display: 'flex', gap: '8px', alignItems: 'center', padding: '8px', backgroundColor: '#f5f3f0', borderRadius: '8px', border: `0.5px solid ${ui.colors.border}`, opacity: 0.55 },
+    reviewTable: { display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '460px', overflowY: 'auto', marginBottom: '14px' },
+    reviewRowWrap: { backgroundColor: '#fff', borderRadius: '8px', border: `0.5px solid ${ui.colors.border}`, padding: '8px' },
+    reviewRowWrapOff: { backgroundColor: '#f5f3f0', borderRadius: '8px', border: `0.5px solid ${ui.colors.border}`, padding: '8px', opacity: 0.55 },
+    reviewRowMain: { display: 'flex', gap: '8px', alignItems: 'center' },
     reviewCheckbox: { flexShrink: 0 },
     reviewDateInput: { padding: '6px 8px', border: `0.5px solid ${ui.colors.borderStrong}`, borderRadius: '6px', fontSize: '12px', width: '130px', flexShrink: 0 },
     reviewDescInput: { padding: '6px 8px', border: `0.5px solid ${ui.colors.borderStrong}`, borderRadius: '6px', fontSize: '12px', flex: 1, minWidth: '120px' },
@@ -594,6 +633,11 @@ const styles = {
     reviewAmountInput: { padding: '6px 8px', border: `0.5px solid ${ui.colors.borderStrong}`, borderRadius: '6px', fontSize: '12px', width: '100px', flexShrink: 0 },
     reviewTypeWrap: { width: '140px', flexShrink: 0 },
     reviewMissing: { color: ui.colors.accent, fontSize: '14px', flexShrink: 0 },
+    reviewRowExtras: { display: 'flex', alignItems: 'center', gap: '10px', marginTop: '8px', paddingLeft: '26px', flexWrap: 'wrap' },
+    reviewExtraLabel: { fontSize: '12px', color: ui.colors.inkSoft, whiteSpace: 'nowrap' },
+    reviewMachineChips: { display: 'flex', flexWrap: 'wrap', gap: '5px' },
+    reviewChip: { padding: '3px 10px', border: `0.5px solid ${ui.colors.borderStrong}`, borderRadius: '20px', cursor: 'pointer', backgroundColor: '#fff', fontSize: '11px', color: ui.colors.ink },
+    reviewChipActive: { padding: '3px 10px', border: `0.5px solid ${ui.colors.accent}`, borderRadius: '20px', cursor: 'pointer', backgroundColor: ui.colors.accentSoft, color: ui.colors.accent, fontSize: '11px', fontWeight: '500' },
     reviewFooter: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
     reviewCount: { fontSize: '12px', color: ui.colors.muted },
 };

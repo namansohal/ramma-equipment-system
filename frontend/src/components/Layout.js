@@ -14,21 +14,22 @@ export default function Layout({ children }) {
     };
 
     const navItems = [
-        { path: '/dashboard', label: 'Dashboard', icon: '▦' },
-        { path: '/mainbook', label: 'Mainbook', icon: '❐' },
-        { path: '/expenses', label: 'Expenses', icon: '₵' },
-        { path: '/alerts', label: 'Alerts', icon: '⚠' },
-        { path: '/stock', label: 'Spare Parts', icon: '⚙' },
-        { path: '/loans', label: 'Loans', icon: '◎' },
-        { path: '/machines', label: 'Machines', icon: '⬢' },
-        { path: '/downtime', label: 'Downtime', icon: '◔' },
-        { path: '/reports', label: 'Reports', icon: '▤' },
-    ];
-    if (isAdmin) {
-        navItems.push({ path: '/audit', label: 'Activity Log', icon: '☰' });
-        navItems.push({ path: '/staff', label: 'Staff', icon: '☺' });
-        navItems.push({ path: '/users', label: 'Employees', icon: '◈' });
-    }
+    { path: '/dashboard', label: 'Dashboard', icon: '▦' },
+    { path: '/mainbook', label: 'Mainbook', icon: '❐' },
+    { path: '/expenses', label: 'Expenses', icon: '₵' },
+    { path: '/momo', label: 'MOMO', icon: '▥' },
+    { path: '/runtime', label: 'Runtime', icon: '◷' },
+    { path: '/downtime', label: 'Downtime', icon: '◔' },
+    { path: '/stock', label: 'Spare Parts', icon: '⚙' },
+    { path: '/loans', label: 'Loans', icon: '◎' },
+    { path: '/machines', label: 'Machines', icon: '⬢' },
+    { path: '/reports', label: 'Reports', icon: '▤' },
+];
+if (isAdmin) {
+    navItems.push({ path: '/audit', label: 'Activity Log', icon: '☰' });
+    navItems.push({ path: '/staff', label: 'Staff', icon: '▣' });
+    navItems.push({ path: '/users', label: 'Users', icon: '◈' });
+}
 
     const roleName = (user.role || '').charAt(0).toUpperCase() + (user.role || '').slice(1);
     const showRoleSeparately = (user.full_name || '').toLowerCase() !== (user.role || '').toLowerCase();
