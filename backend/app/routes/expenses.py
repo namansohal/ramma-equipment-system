@@ -49,10 +49,23 @@ def create_expense(
     if not location:
         raise HTTPException(status_code=400, detail="No current location set")
 
-    debit = float(data.debit or 0)
-    credit = float(data.credit or 0)
-    if debit < 0 or credit < 0:
-        raise HTTPException(status_code=400, detail="Amounts cannot be negative")
+    expense_type = db.query(ExpenseType).filter(ExpenseType.type_id == data.expense_type_id).first()
+    if not expense_type:
+        raise HTTPException(status_code=404, detail="Expense type not found")
+
+    # Loan type routes through the shared loan-creation logic instead of a plain expense —
+    # this creates BOTH the Loan record (tied to Staff) and the linked Expense-book row.
+    if expense_type.code == "loan":
+        if not data.staff_id:
+            raise HTTPException(status_code=400, detail="Select which staff member this loan is for")
+        from app.routes.loans import create_loan_with_expense
+        loan = create_loan_with_expense(
+            db, data.staff_id, float(data.debit or 0), data.txn_date, data.description, current_user
+        )
+        _recompute_expense_balances(db, location.location_id)
+        db.commit()
+        expense = db.query(Expense).filter(Expense.expense_id == loan.expense_id).first()
+        return expense
 
     is_common = len(data.machine_ids) == 0
 

@@ -13,6 +13,7 @@ class ExpenseCreate(BaseModel):
     machine_ids: Optional[List[int]] = []
     notes: Optional[str] = None
     is_carry_forward: Optional[bool] = False
+    staff_id: Optional[int] = None  # required when expense_type is "loan"
 
 
 class ExpenseEdit(BaseModel):

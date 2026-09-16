@@ -8,7 +8,8 @@ class Loan(Base):
     __tablename__ = "loans"
 
     loan_id      = Column(Integer, primary_key=True, index=True)
-    user_id      = Column(Integer, ForeignKey("users.user_id"), nullable=False)
+    staff_id     = Column(Integer, ForeignKey("staff.staff_id"), nullable=True)
+    user_id      = Column(Integer, ForeignKey("users.user_id"), nullable=True)
     amount       = Column(Numeric(14, 2), nullable=False)
     issued_date  = Column(Date, nullable=False)
     notes        = Column(Text, nullable=True)
@@ -18,6 +19,7 @@ class Loan(Base):
     deleted_at   = Column(DateTime(timezone=True), nullable=True)
     deleted_by   = Column(Integer, ForeignKey("users.user_id"), nullable=True)
 
+    staff        = relationship("Staff")
     borrower     = relationship("User", foreign_keys=[user_id])
     creator      = relationship("User", foreign_keys=[created_by])
     repayments   = relationship("LoanRepayment", back_populates="loan")

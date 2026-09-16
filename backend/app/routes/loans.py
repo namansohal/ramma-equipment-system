@@ -1,23 +1,23 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from sqlalchemy import func
 from typing import Optional
-from datetime import date, datetime
+from datetime import date
 from pydantic import BaseModel
 from app.database import get_db
 from app.models.loans import Loan, LoanRepayment
-from app.models.users import User
+from app.models.staff import Staff
 from app.models.expenses import Expense, ExpenseType
 from app.models.locations import Location
 from app.models.audit import AuditLog
 from app.auth import get_current_user
+from app.models.users import User
 from app.permissions import require_editor
 
 router = APIRouter(prefix="/loans", tags=["Loans"])
 
 
 class LoanCreate(BaseModel):
-    user_id: int
+    staff_id: int
     amount: float
     issued_date: date
     notes: Optional[str] = None
@@ -26,47 +26,107 @@ class LoanCreate(BaseModel):
 class RepaymentCreate(BaseModel):
     amount: float
     paid_date: date
-    notes: Optional[str] = None
 
 
-def _current_location(db):
-    return db.query(Location).filter(Location.is_current == True).first()
+def _recompute_expense_balances(db: Session, location_id: int):
+    rows = db.query(Expense).filter(
+        Expense.location_id == location_id,
+        Expense.deleted_at == None
+    ).order_by(Expense.expense_id).all()
+    balance = 0.0
+    for r in rows:
+        balance = balance + float(r.credit or 0) - float(r.debit or 0)
+        r.balance = balance
 
 
-def _post_expense(db, current_user, txn_date, description, debit=0, credit=0):
-    location = _current_location(db)
-    last = db.query(Expense).filter(
+def create_loan_with_expense(db: Session, staff_id: int, amount: float, issued_date: date, notes: str, current_user: User) -> Loan:
+    """
+    Shared logic: creates a Loan tied to a Staff member AND a matching Expense-book
+    entry (money out, type=Loan). Used by both the dedicated Loans page and the
+    Expense book's "Loan" type entry point — either way produces the same record.
+    """
+    staff = db.query(Staff).filter(Staff.staff_id == staff_id, Staff.deleted_at == None).first()
+    if not staff:
+        raise HTTPException(status_code=404, detail="Staff member not found")
+
+    location = db.query(Location).filter(Location.is_current == True).first()
+    if not location:
+        raise HTTPException(status_code=400, detail="No current location set")
+
+    last_exp = db.query(Expense).filter(
         Expense.location_id == location.location_id,
         Expense.deleted_at == None
     ).order_by(Expense.expense_id.desc()).first()
-    last_balance = last.balance if last else 0
-    new_balance = float(last_balance) + float(credit) - float(debit)
+    last_balance = last_exp.balance if last_exp else 0
+    new_balance = float(last_balance) - amount
 
     loan_type = db.query(ExpenseType).filter(ExpenseType.code == "loan").first()
 
-    exp = Expense(
+    expense = Expense(
         location_id=location.location_id,
         expense_type_id=loan_type.type_id if loan_type else 1,
-        txn_date=txn_date,
-        description=description,
-        debit=debit,
-        credit=credit,
+        txn_date=issued_date,
+        description=f"Loan to {staff.full_name}" + (f" — {notes}" if notes else ""),
+        debit=amount,
+        credit=0,
         balance=new_balance,
         is_common=False,
         created_by=current_user.user_id,
     )
-    db.add(exp)
+    db.add(expense)
     db.flush()
-    return exp
+
+    loan = Loan(
+        staff_id=staff_id,
+        amount=amount,
+        issued_date=issued_date,
+        notes=notes,
+        expense_id=expense.expense_id,
+        created_by=current_user.user_id,
+    )
+    db.add(loan)
+    db.flush()
+
+    db.add(AuditLog(
+        table_name="loans",
+        record_id=loan.loan_id,
+        action="CREATE",
+        new_value=f"staff={staff.full_name} amount={amount}",
+        changed_by=current_user.user_id,
+    ))
+    return loan
 
 
 @router.get("/borrowers")
 def list_borrowers(
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_editor)
+    current_user: User = Depends(get_current_user)
 ):
-    users = db.query(User).filter(User.active == True).all()
-    return [{"user_id": u.user_id, "full_name": u.full_name} for u in users]
+    staff = db.query(Staff).filter(Staff.deleted_at == None, Staff.active == True).order_by(Staff.full_name).all()
+    return [{"staff_id": s.staff_id, "full_name": s.full_name} for s in staff]
+
+
+@router.get("/")
+def list_loans(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    loans = db.query(Loan).filter(Loan.deleted_at == None).order_by(Loan.issued_date.desc()).all()
+    result = []
+    for l in loans:
+        paid = db.query(LoanRepayment).filter(LoanRepayment.loan_id == l.loan_id).all()
+        total_paid = sum(float(p.amount) for p in paid)
+        remaining = float(l.amount) - total_paid
+        result.append({
+            "loan_id": l.loan_id,
+            "borrower": l.staff.full_name if l.staff else "(unknown)",
+            "amount": float(l.amount),
+            "paid": total_paid,
+            "remaining": remaining,
+            "issued_date": str(l.issued_date),
+            "settled": remaining <= 0,
+        })
+    return result
 
 
 @router.post("/")
@@ -75,33 +135,10 @@ def create_loan(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_editor)
 ):
-    borrower = db.query(User).filter(User.user_id == data.user_id).first()
-    if not borrower:
-        raise HTTPException(status_code=404, detail="Employee not found")
-
-    exp = _post_expense(
-        db, current_user, data.issued_date,
-        f"Loan to {borrower.full_name}", debit=data.amount, credit=0
-    )
-
-    loan = Loan(
-        user_id=data.user_id,
-        amount=data.amount,
-        issued_date=data.issued_date,
-        notes=data.notes,
-        expense_id=exp.expense_id,
-        created_by=current_user.user_id,
-    )
-    db.add(loan)
-    db.flush()
-
-    db.add(AuditLog(
-        table_name="loans", record_id=loan.loan_id, action="CREATE",
-        new_value=f"loan {data.amount} to {borrower.full_name}",
-        changed_by=current_user.user_id,
-    ))
+    loan = create_loan_with_expense(db, data.staff_id, data.amount, data.issued_date, data.notes, current_user)
+    _recompute_expense_balances(db, db.query(Location).filter(Location.is_current == True).first().location_id)
     db.commit()
-    return {"message": f"Loan of {data.amount} recorded for {borrower.full_name}"}
+    return {"message": "Loan recorded", "loan_id": loan.loan_id}
 
 
 @router.post("/{loan_id}/repay")
@@ -115,61 +152,48 @@ def repay_loan(
     if not loan:
         raise HTTPException(status_code=404, detail="Loan not found")
 
-    paid = db.query(func.coalesce(func.sum(LoanRepayment.amount), 0)).filter(
-        LoanRepayment.loan_id == loan_id, LoanRepayment.deleted_at == None
-    ).scalar()
-    remaining = float(loan.amount) - float(paid)
-    if data.amount > remaining + 0.001:
-        raise HTTPException(status_code=400, detail=f"Repayment exceeds remaining balance ({remaining})")
+    location = db.query(Location).filter(Location.is_current == True).first()
+    last_exp = db.query(Expense).filter(
+        Expense.location_id == location.location_id,
+        Expense.deleted_at == None
+    ).order_by(Expense.expense_id.desc()).first()
+    last_balance = last_exp.balance if last_exp else 0
+    new_balance = float(last_balance) + data.amount
 
-    borrower = db.query(User).filter(User.user_id == loan.user_id).first()
+    loan_type = db.query(ExpenseType).filter(ExpenseType.code == "loan").first()
+    staff_name = loan.staff.full_name if loan.staff else "staff"
 
-    exp = _post_expense(
-        db, current_user, data.paid_date,
-        f"Loan repayment from {borrower.full_name}", debit=0, credit=data.amount
+    expense = Expense(
+        location_id=location.location_id,
+        expense_type_id=loan_type.type_id if loan_type else 1,
+        txn_date=data.paid_date,
+        description=f"Loan repayment from {staff_name}",
+        debit=0,
+        credit=data.amount,
+        balance=new_balance,
+        is_common=False,
+        created_by=current_user.user_id,
     )
+    db.add(expense)
+    db.flush()
 
-    rep = LoanRepayment(
+    repayment = LoanRepayment(
         loan_id=loan_id,
         amount=data.amount,
         paid_date=data.paid_date,
-        notes=data.notes,
-        expense_id=exp.expense_id,
+        expense_id=expense.expense_id,
         created_by=current_user.user_id,
     )
-    db.add(rep)
-    db.flush()
+    db.add(repayment)
 
     db.add(AuditLog(
-        table_name="loans", record_id=loan_id, action="UPDATE",
-        field_name="repayment", new_value=f"repaid {data.amount}",
+        table_name="loans",
+        record_id=loan_id,
+        action="UPDATE",
+        new_value=f"repayment of {data.amount} by {staff_name}",
         changed_by=current_user.user_id,
     ))
+
+    _recompute_expense_balances(db, location.location_id)
     db.commit()
-    return {"message": f"Repayment of {data.amount} recorded"}
-
-
-@router.get("/")
-def list_loans(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    loans = db.query(Loan).filter(Loan.deleted_at == None).order_by(Loan.loan_id.desc()).all()
-    users = {u.user_id: u.full_name for u in db.query(User).all()}
-
-    result = []
-    for l in loans:
-        paid = db.query(func.coalesce(func.sum(LoanRepayment.amount), 0)).filter(
-            LoanRepayment.loan_id == l.loan_id, LoanRepayment.deleted_at == None
-        ).scalar()
-        result.append({
-            "loan_id": l.loan_id,
-            "borrower": users.get(l.user_id, "Unknown"),
-            "amount": float(l.amount),
-            "paid": float(paid),
-            "remaining": float(l.amount) - float(paid),
-            "issued_date": str(l.issued_date),
-            "notes": l.notes,
-            "settled": (float(l.amount) - float(paid)) <= 0.001,
-        })
-    return result
+    return {"message": "Repayment recorded"}    
