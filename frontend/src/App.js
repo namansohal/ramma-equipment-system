@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
@@ -16,14 +16,14 @@ import Loans from './pages/Loans';
 import Staff from './pages/Staff';
 import Alerts from './pages/Alerts';
 import Momo from './pages/Momo';
+import Runtime from './pages/Runtime';
 import API from './services/api';
 
 function isTokenExpired(token) {
     try {
         const payload = JSON.parse(atob(token.split('.')[1]));
         if (!payload.exp) return false;
-        const nowInSeconds = Math.floor(Date.now() / 1000);
-        return payload.exp < nowInSeconds;
+        return payload.exp < Math.floor(Date.now() / 1000);
     } catch (e) {
         return true;
     }
@@ -39,7 +39,6 @@ function PrivateRoute({ children }) {
 }
 
 export default function App() {
-    // Also catch expiry mid-session: if any API call returns 401, kick to login immediately
     useEffect(() => {
         const interceptorId = API.interceptors.response.use(
             (response) => response,
@@ -53,9 +52,7 @@ export default function App() {
                 return Promise.reject(error);
             }
         );
-        return () => {
-            API.interceptors.response.eject(interceptorId);
-        };
+        return () => { API.interceptors.response.eject(interceptorId); };
     }, []);
 
     return (
@@ -75,6 +72,7 @@ export default function App() {
                 <Route path="/staff" element={<PrivateRoute><Staff /></PrivateRoute>} />
                 <Route path="/alerts" element={<PrivateRoute><Alerts /></PrivateRoute>} />
                 <Route path="/momo" element={<PrivateRoute><Momo /></PrivateRoute>} />
+                <Route path="/runtime" element={<PrivateRoute><Runtime /></PrivateRoute>} />
                 <Route path="/users" element={<PrivateRoute><Users /></PrivateRoute>} />
                 <Route path="/account" element={<PrivateRoute><Account /></PrivateRoute>} />
                 <Route path="*" element={<Navigate to="/login" />} />

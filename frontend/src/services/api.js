@@ -72,9 +72,15 @@ export const getUnreadAlertCount = () => API.get('/alerts/unread-count');
 export const markAlertRead = (id) => API.post(`/alerts/${id}/read`);
 export const deleteAlert = (id) => API.delete(`/alerts/${id}`);
 
-export const extractReceipt = (file) => {
+export const getRuntime = (params) => API.get('/runtime/', { params });
+export const createRuntime = (data) => API.post('/runtime/', data);
+export const editRuntime = (id, data) => API.patch(`/runtime/${id}`, data);
+export const deleteRuntime = (id) => API.delete(`/runtime/${id}`);
+
+export const extractReceipt = (file, mode = 'expense') => {
     const formData = new FormData();
     formData.append('file', file);
+    formData.append('mode', mode);
     return API.post('/ai/extract-receipt', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
     });
