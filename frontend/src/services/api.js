@@ -67,6 +67,12 @@ export const editMainbook = (id, data) => API.patch(`/mainbook/${id}`, data);
 export const deleteMainbook = (id) => API.delete(`/mainbook/${id}`);
 export const bulkDeleteMainbook = (ids) => API.delete('/mainbook/bulk', { data: { ids } });
 
+export const getMomo = (params) => API.get('/momo/', { params });
+export const createMomo = (data) => API.post('/momo/', data);
+export const editMomo = (id, data) => API.patch(`/momo/${id}`, data);
+export const deleteMomo = (id) => API.delete(`/momo/${id}`);
+export const bulkDeleteMomo = (ids) => API.delete('/momo/bulk', { data: { ids } });
+
 export const getAlerts = () => API.get('/alerts/');
 export const getUnreadAlertCount = () => API.get('/alerts/unread-count');
 export const markAlertRead = (id) => API.post(`/alerts/${id}/read`);
