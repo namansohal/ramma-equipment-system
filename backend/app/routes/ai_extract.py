@@ -1,7 +1,9 @@
 import os
 import json
 import base64
+from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from pydantic import BaseModel
 from google import genai
 from app.auth import get_current_user
 from app.models.users import User
@@ -10,6 +12,42 @@ from app.permissions import require_editor
 router = APIRouter(prefix="/ai", tags=["AI Extraction"])
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+
+
+class ChatMessage(BaseModel):
+    role: str
+    content: str
+
+
+class ChatRequest(BaseModel):
+    messages: List[ChatMessage]
+    system: Optional[str] = None
+
+
+@router.post("/chat")
+async def ai_chat(
+    data: ChatRequest,
+    current_user: User = Depends(get_current_user)
+):
+    if not GEMINI_API_KEY:
+        raise HTTPException(status_code=500, detail="AI not configured on the server")
+    try:
+        client = genai.Client(api_key=GEMINI_API_KEY)
+        contents = []
+        for m in data.messages:
+            contents.append({
+                "role": "user" if m.role == "user" else "model",
+                "parts": [{"text": m.content}]
+            })
+        if data.system and contents:
+            contents[0]["parts"][0]["text"] = f"{data.system}\n\n{contents[0]['parts'][0]['text']}"
+        response = client.models.generate_content(
+            model="gemini-3.6-flash",
+            contents=contents,
+        )
+        return {"reply": response.text}
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"AI chat failed: {str(e)}")
 
 
 @router.post("/extract-receipt")

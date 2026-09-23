@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import Layout from '../components/Layout';
+import API from '../services/api';
 import * as ui from '../components/ui';
 
 export default function Secret() {
@@ -31,20 +32,10 @@ export default function Secret() {
         cleaned = cleaned.replace(/  +/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
 
         try {
-            const response = await fetch('https://api.anthropic.com/v1/messages', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    model: 'claude-sonnet-4-6',
-                    max_tokens: 1000,
-                    messages: [{
-                        role: 'user',
-                        content: `The following text has had junk strings removed but may have leftover spacing issues, broken sentences, or formatting problems. Clean it up into well-formatted, readable paragraphs. Fix spacing and punctuation only — do not change the meaning or add new content. Return only the cleaned text, nothing else.\n\n${cleaned}`
-                    }]
-                })
+            const res = await API.post('/ai/chat', {
+                messages: [{ role: 'user', content: `The following text has had junk strings removed but may have leftover spacing issues, broken sentences, or formatting problems. Clean it up into well-formatted, readable paragraphs. Fix spacing and punctuation only — do not change the meaning or add new content. Return only the cleaned text, nothing else.\n\n${cleaned}` }]
             });
-            const data = await response.json();
-            setOutput(data.content?.[0]?.text || cleaned);
+            setOutput(res.data.reply || cleaned);
         } catch {
             setOutput(cleaned);
         } finally {
@@ -68,19 +59,11 @@ export default function Secret() {
         setChatLoading(true);
 
         try {
-            const response = await fetch('https://api.anthropic.com/v1/messages', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    model: 'claude-sonnet-4-6',
-                    max_tokens: 1000,
-                    system: 'You are a helpful assistant. When given multiple choice questions, identify the correct answer and explain why clearly and concisely. For other questions, give direct, accurate answers.',
-                    messages: newMessages.map(m => ({ role: m.role, content: m.content }))
-                })
+            const res = await API.post('/ai/chat', {
+                system: 'You are a helpful assistant. When given multiple choice questions, identify the correct answer and explain why clearly and concisely. For other questions, give direct, accurate answers.',
+                messages: newMessages
             });
-            const data = await response.json();
-            const reply = data.content?.[0]?.text || 'No response received.';
-            setMessages(prev => [...prev, { role: 'assistant', content: reply }]);
+            setMessages(prev => [...prev, { role: 'assistant', content: res.data.reply }]);
         } catch {
             setMessages(prev => [...prev, { role: 'assistant', content: 'Error connecting to AI. Please try again.' }]);
         } finally {
@@ -95,34 +78,19 @@ export default function Secret() {
         }
     };
 
-    const clearChat = () => setMessages([]);
-
     return (
         <Layout>
-            {/* Text Cleaner */}
             <div style={ui.card}>
                 <div style={ui.cardTitle}>Text Cleaner</div>
                 {cleanError && <div style={ui.alertError}>{cleanError}</div>}
                 <div style={styles.grid}>
                     <div style={ui.field}>
                         <label style={ui.label}>Paste dirty text here</label>
-                        <textarea
-                            style={styles.textarea}
-                            value={dirtyText}
-                            onChange={e => setDirtyText(e.target.value)}
-                            placeholder="Paste the text with junk strings mixed in..."
-                            rows={10}
-                        />
+                        <textarea style={styles.textarea} value={dirtyText} onChange={e => setDirtyText(e.target.value)} placeholder="Paste the text with junk strings mixed in..." rows={10} />
                     </div>
                     <div style={ui.field}>
                         <label style={ui.label}>Junk strings to remove (one per line)</label>
-                        <textarea
-                            style={styles.textarea}
-                            value={junkStrings}
-                            onChange={e => setJunkStrings(e.target.value)}
-                            placeholder={"ubsvivbsudbvusdbvub\nanother_junk_string"}
-                            rows={10}
-                        />
+                        <textarea style={styles.textarea} value={junkStrings} onChange={e => setJunkStrings(e.target.value)} placeholder={"ubsvivbsudbvusdbvub\nanother_junk_string"} rows={10} />
                     </div>
                 </div>
                 <button onClick={clean} style={cleaning ? ui.btnDisabled : ui.btn} disabled={cleaning}>
@@ -134,27 +102,22 @@ export default function Secret() {
                 <div style={ui.card}>
                     <div style={styles.outputHeader}>
                         <div style={ui.cardTitle}>Cleaned Output</div>
-                        <button onClick={copyOutput} style={styles.copyBtn}>
-                            {copied ? '✓ Copied' : 'Copy'}
-                        </button>
+                        <button onClick={copyOutput} style={styles.copyBtn}>{copied ? '✓ Copied' : 'Copy'}</button>
                     </div>
                     <div style={styles.output}>{output}</div>
                 </div>
             )}
 
-            {/* AI Chat */}
             <div style={ui.card}>
                 <div style={styles.outputHeader}>
                     <div style={ui.cardTitle}>Ask AI</div>
                     {messages.length > 0 && (
-                        <button onClick={clearChat} style={styles.clearBtn}>Clear chat</button>
+                        <button onClick={() => setMessages([])} style={styles.clearBtn}>Clear chat</button>
                     )}
                 </div>
 
                 {messages.length === 0 && (
-                    <div style={styles.emptyChat}>
-                        Paste a question, MCQ, or anything you want answered. Press Enter to send.
-                    </div>
+                    <div style={styles.emptyChat}>Paste a question, MCQ, or anything you want answered. Press Enter to send.</div>
                 )}
 
                 {messages.length > 0 && (
@@ -213,6 +176,6 @@ const styles = {
     msgContent: { fontSize: '13px', color: ui.colors.ink, lineHeight: '1.7', whiteSpace: 'pre-wrap' },
     inputRow: { display: 'flex', gap: '10px', alignItems: 'flex-end' },
     chatInput: { flex: 1, padding: '10px 12px', border: `0.5px solid ${ui.colors.borderStrong}`, borderRadius: '8px', fontSize: '13px', fontFamily: 'inherit', resize: 'none', color: ui.colors.ink, lineHeight: '1.6' },
-    sendBtn: { padding: '10px 20px', backgroundColor: ui.colors.accent, color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '500', whiteSpace: 'nowrap', alignSelf: 'flex-end' },
-    sendBtnDisabled: { padding: '10px 20px', backgroundColor: ui.colors.muted, color: '#fff', border: 'none', borderRadius: '8px', cursor: 'not-allowed', fontSize: '13px', fontWeight: '500', whiteSpace: 'nowrap', alignSelf: 'flex-end' },
+    sendBtn: { padding: '10px 20px', backgroundColor: ui.colors.accent, color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '500', whiteSpace: 'nowrap' },
+    sendBtnDisabled: { padding: '10px 20px', backgroundColor: ui.colors.muted, color: '#fff', border: 'none', borderRadius: '8px', cursor: 'not-allowed', fontSize: '13px', fontWeight: '500', whiteSpace: 'nowrap' },
 };
