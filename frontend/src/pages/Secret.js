@@ -6,6 +6,7 @@ import * as ui from '../components/ui';
 export default function Secret() {
     const [dirtyText, setDirtyText] = useState('');
     const [junkStrings, setJunkStrings] = useState('');
+    const [extraRemove, setExtraRemove] = useState('');
     const [output, setOutput] = useState('');
     const [cleaning, setCleaning] = useState(false);
     const [cleanError, setCleanError] = useState('');
@@ -25,15 +26,18 @@ export default function Secret() {
         setCleaning(true); setCleanError(''); setOutput('');
 
         const junks = junkStrings.split('\n').map(s => s.trim()).filter(Boolean);
+        const extras = extraRemove.split('\n').map(s => s.trim()).filter(Boolean);
+        const allRemove = [...junks, ...extras];
+
         let cleaned = dirtyText;
-        for (const junk of junks) {
+        for (const junk of allRemove) {
             cleaned = cleaned.split(junk).join('');
         }
         cleaned = cleaned.replace(/  +/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
 
         try {
             const res = await API.post('/ai/chat', {
-                messages: [{ role: 'user', content: `The following text has had junk strings removed but may have leftover spacing issues, broken sentences, or formatting problems. Clean it up into well-formatted, readable paragraphs. Fix spacing and punctuation only — do not change the meaning or add new content. Return only the cleaned text, nothing else.\n\n${cleaned}` }]
+                messages: [{ role: 'user', content: `The following text has had junk strings removed but may have leftover spacing issues, broken sentences, or formatting problems. Clean it up into well-formatted, readable paragraphs. Fix spacing and punctuation only — do not change the meaning or add new content. Return only the cleaned text, nothing else. No markdown, no bold, no italic.\n\n${cleaned}` }]
             });
             setOutput(res.data.reply || cleaned);
         } catch {
@@ -60,7 +64,7 @@ export default function Secret() {
 
         try {
             const res = await API.post('/ai/chat', {
-                system: 'You are a helpful assistant. When given multiple choice questions, identify the correct answer and explain why clearly and concisely. For other questions, give direct, accurate answers.',
+                system: 'You are a helpful assistant. Answer in plain text only. No markdown, no bold, no italic, no bullet points, no headers, no asterisks, no dashes used as formatting. Keep answers as short as possible. For multiple choice questions, state which option is correct and why in one sentence. For other questions, one or two sentences maximum.',
                 messages: newMessages
             });
             setMessages(prev => [...prev, { role: 'assistant', content: res.data.reply }]);
@@ -86,11 +90,17 @@ export default function Secret() {
                 <div style={styles.grid}>
                     <div style={ui.field}>
                         <label style={ui.label}>Paste dirty text here</label>
-                        <textarea style={styles.textarea} value={dirtyText} onChange={e => setDirtyText(e.target.value)} placeholder="Paste the text with junk strings mixed in..." rows={10} />
+                        <textarea style={styles.textarea} value={dirtyText} onChange={e => setDirtyText(e.target.value)} placeholder="Paste the text to clean..." rows={10} />
                     </div>
-                    <div style={ui.field}>
-                        <label style={ui.label}>Junk strings to remove (one per line)</label>
-                        <textarea style={styles.textarea} value={junkStrings} onChange={e => setJunkStrings(e.target.value)} placeholder={"ubsvivbsudbvusdbvub\nanother_junk_string"} rows={10} />
+                    <div>
+                        <div style={ui.field}>
+                            <label style={ui.label}>Repeated junk strings to remove (one per line)</label>
+                            <textarea style={styles.textarea} value={junkStrings} onChange={e => setJunkStrings(e.target.value)} placeholder="One junk string per line..." rows={4} />
+                        </div>
+                        <div style={ui.field}>
+                            <label style={ui.label}>One-off words or lines to remove (one per line)</label>
+                            <textarea style={styles.textarea} value={extraRemove} onChange={e => setExtraRemove(e.target.value)} placeholder="e.g. Video. Duration: 11 minutes11 min" rows={4} />
+                        </div>
                     </div>
                 </div>
                 <button onClick={clean} style={cleaning ? ui.btnDisabled : ui.btn} disabled={cleaning}>
@@ -165,7 +175,7 @@ const styles = {
     grid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' },
     textarea: { width: '100%', padding: '10px 12px', border: `0.5px solid ${ui.colors.borderStrong}`, borderRadius: '8px', fontSize: '13px', fontFamily: 'inherit', resize: 'vertical', color: ui.colors.ink, lineHeight: '1.6', boxSizing: 'border-box' },
     outputHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' },
-    output: { fontSize: '14px', color: ui.colors.ink, lineHeight: '1.8', whiteSpace: 'pre-wrap', backgroundColor: '#f9f8f6', padding: '16px', borderRadius: '8px', border: `0.5px solid ${ui.colors.border}` },
+    output: { fontSize: '13px', color: ui.colors.ink, lineHeight: '1.7', whiteSpace: 'pre-wrap', backgroundColor: '#f9f8f6', padding: '14px', borderRadius: '8px', border: `0.5px solid ${ui.colors.border}`, maxHeight: '180px', overflowY: 'auto' },
     copyBtn: { padding: '6px 14px', backgroundColor: ui.colors.ink, color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: '500' },
     clearBtn: { padding: '6px 14px', backgroundColor: '#fff', color: ui.colors.inkSoft, border: `0.5px solid ${ui.colors.borderStrong}`, borderRadius: '6px', cursor: 'pointer', fontSize: '12px' },
     emptyChat: { fontSize: '13px', color: ui.colors.muted, padding: '16px 0', marginBottom: '12px' },

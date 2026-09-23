@@ -42,7 +42,7 @@ async def ai_chat(
         if data.system and contents:
             contents[0]["parts"][0]["text"] = f"{data.system}\n\n{contents[0]['parts'][0]['text']}"
         response = client.models.generate_content(
-            model="gemini-3.6-flash",
+            model="gemini-1.5-flash",
             contents=contents,
         )
         return {"reply": response.text}
@@ -120,7 +120,7 @@ Return ONLY a valid JSON array, no markdown, no explanation:
 Do not skip any line. If a numeric value is genuinely illegible, use null but still include the row."""
 
         response = client.models.generate_content(
-            model="gemini-3.6-flash",
+            model="gemini-1.5-flash",
             contents=[
                 {"inline_data": {"mime_type": file.content_type or "image/jpeg", "data": base64.b64encode(contents).decode("utf-8")}},
                 {"text": prompt},
