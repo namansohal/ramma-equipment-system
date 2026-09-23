@@ -6,7 +6,7 @@ import * as ui from '../components/ui';
 export default function Secret() {
     const [dirtyText, setDirtyText] = useState('');
     const [junkStrings, setJunkStrings] = useState('');
-    const [extraRemove, setExtraRemove] = useState('');
+    const [removeIrrelevant, setRemoveIrrelevant] = useState(false);
     const [output, setOutput] = useState('');
     const [cleaning, setCleaning] = useState(false);
     const [cleanError, setCleanError] = useState('');
@@ -26,18 +26,22 @@ export default function Secret() {
         setCleaning(true); setCleanError(''); setOutput('');
 
         const junks = junkStrings.split('\n').map(s => s.trim()).filter(Boolean);
-        const extras = extraRemove.split('\n').map(s => s.trim()).filter(Boolean);
-        const allRemove = [...junks, ...extras];
-
         let cleaned = dirtyText;
-        for (const junk of allRemove) {
+        for (const junk of junks) {
             cleaned = cleaned.split(junk).join('');
         }
         cleaned = cleaned.replace(/  +/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
 
+        const irrelevantInstruction = removeIrrelevant
+            ? 'Also remove all irrelevant content such as course navigation, video durations, reading durations, assignment durations, grade percentages, "Practice Assignment", "Graded Assignment", "Video.", "Reading.", "Dialogue.", "1 point", "Due dates", instructor names, course titles, and any other metadata that is not part of the actual questions or content. Keep only the actual questions, options, and explanatory content.'
+            : '';
+
         try {
             const res = await API.post('/ai/chat', {
-                messages: [{ role: 'user', content: `The following text has had junk strings removed but may have leftover spacing issues, broken sentences, or formatting problems. Clean it up into well-formatted, readable paragraphs. Fix spacing and punctuation only — do not change the meaning or add new content. Return only the cleaned text, nothing else. No markdown, no bold, no italic.\n\n${cleaned}` }]
+                messages: [{
+                    role: 'user',
+                    content: `The following text has had junk strings removed but may have leftover spacing issues, broken sentences, or formatting problems. Clean it up into well-formatted, readable paragraphs. Fix spacing and punctuation only — do not change the meaning or add new content. No markdown, no bold, no italic. Return only the cleaned text, nothing else.\n${irrelevantInstruction}\n\n${cleaned}`
+                }]
             });
             setOutput(res.data.reply || cleaned);
         } catch {
@@ -56,12 +60,10 @@ export default function Secret() {
     const sendMessage = async () => {
         const text = chatInput.trim();
         if (!text) return;
-
         const newMessages = [...messages, { role: 'user', content: text }];
         setMessages(newMessages);
         setChatInput('');
         setChatLoading(true);
-
         try {
             const res = await API.post('/ai/chat', {
                 system: 'You are a helpful assistant. Answer in plain text only. No markdown, no bold, no italic, no bullet points, no headers, no asterisks, no dashes used as formatting. Keep answers as short as possible. For multiple choice questions, state which option is correct and why in one sentence. For other questions, one or two sentences maximum.',
@@ -92,20 +94,20 @@ export default function Secret() {
                         <label style={ui.label}>Paste dirty text here</label>
                         <textarea style={styles.textarea} value={dirtyText} onChange={e => setDirtyText(e.target.value)} placeholder="Paste the text to clean..." rows={10} />
                     </div>
-                    <div>
-                        <div style={ui.field}>
-                            <label style={ui.label}>Repeated junk strings to remove (one per line)</label>
-                            <textarea style={styles.textarea} value={junkStrings} onChange={e => setJunkStrings(e.target.value)} placeholder="One junk string per line..." rows={4} />
-                        </div>
-                        <div style={ui.field}>
-                            <label style={ui.label}>One-off words or lines to remove (one per line)</label>
-                            <textarea style={styles.textarea} value={extraRemove} onChange={e => setExtraRemove(e.target.value)} placeholder="e.g. Video. Duration: 11 minutes11 min" rows={4} />
-                        </div>
+                    <div style={ui.field}>
+                        <label style={ui.label}>Junk strings to remove (one per line)</label>
+                        <textarea style={styles.textarea} value={junkStrings} onChange={e => setJunkStrings(e.target.value)} placeholder="One junk string per line..." rows={10} />
                     </div>
                 </div>
-                <button onClick={clean} style={cleaning ? ui.btnDisabled : ui.btn} disabled={cleaning}>
-                    {cleaning ? 'Cleaning...' : 'Clean & Format'}
-                </button>
+                <label style={styles.checkboxLabel}>
+                    <input type="checkbox" checked={removeIrrelevant} onChange={e => setRemoveIrrelevant(e.target.checked)} />
+                    Remove irrelevant content (course metadata, durations, video labels, grades)
+                </label>
+                <div style={{ marginTop: '14px' }}>
+                    <button onClick={clean} style={cleaning ? ui.btnDisabled : ui.btn} disabled={cleaning}>
+                        {cleaning ? 'Cleaning...' : 'Clean & Format'}
+                    </button>
+                </div>
             </div>
 
             {output && (
@@ -188,4 +190,5 @@ const styles = {
     chatInput: { flex: 1, padding: '10px 12px', border: `0.5px solid ${ui.colors.borderStrong}`, borderRadius: '8px', fontSize: '13px', fontFamily: 'inherit', resize: 'none', color: ui.colors.ink, lineHeight: '1.6' },
     sendBtn: { padding: '10px 20px', backgroundColor: ui.colors.accent, color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '500', whiteSpace: 'nowrap' },
     sendBtnDisabled: { padding: '10px 20px', backgroundColor: ui.colors.muted, color: '#fff', border: 'none', borderRadius: '8px', cursor: 'not-allowed', fontSize: '13px', fontWeight: '500', whiteSpace: 'nowrap' },
+    checkboxLabel: { display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: ui.colors.ink, cursor: 'pointer' },
 };
