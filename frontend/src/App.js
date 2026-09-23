@@ -18,6 +18,7 @@ import Alerts from './pages/Alerts';
 import Momo from './pages/Momo';
 import Runtime from './pages/Runtime';
 import API from './services/api';
+import Secret from './pages/Secret';
 
 function isTokenExpired(token) {
     try {
@@ -73,6 +74,7 @@ export default function App() {
                 <Route path="/alerts" element={<PrivateRoute><Alerts /></PrivateRoute>} />
                 <Route path="/momo" element={<PrivateRoute><Momo /></PrivateRoute>} />
                 <Route path="/runtime" element={<PrivateRoute><Runtime /></PrivateRoute>} />
+                <Route path="/secret" element={<PrivateRoute><Secret /></PrivateRoute>} />
                 <Route path="/users" element={<PrivateRoute><Users /></PrivateRoute>} />
                 <Route path="/account" element={<PrivateRoute><Account /></PrivateRoute>} />
                 <Route path="*" element={<Navigate to="/login" />} />
