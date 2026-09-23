@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import Layout from '../components/Layout';
 import StyledSelect from '../components/StyledSelect';
 import { getBorrowers, getLoans, createLoan, repayLoan, isViewer } from '../services/api';
+import { getErrorMessage } from '../utils/errors';
 import * as ui from '../components/ui';
 
 export default function Loans() {
@@ -14,7 +15,7 @@ export default function Loans() {
     const [repayId, setRepayId] = useState(null);
     const [repayForm, setRepayForm] = useState({ amount: '', paid_date: new Date().toISOString().split('T')[0] });
     const [form, setForm] = useState({
-        user_id: '',
+        staff_id: '',
         amount: '',
         issued_date: new Date().toISOString().split('T')[0],
         notes: '',
@@ -23,7 +24,7 @@ export default function Loans() {
     useEffect(() => {
         loadLoans();
         if (!viewer) loadBorrowers();
-    }, []);
+    }, [viewer]);
 
     const loadBorrowers = async () => {
         try { const res = await getBorrowers(); setBorrowers(res.data); } catch (e) { console.error(e); }
@@ -39,29 +40,27 @@ export default function Loans() {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        setLoading(true);
-        setError('');
-        setSuccess('');
+        if (!form.staff_id) { setError('Select a staff member'); return; }
+        setLoading(true); setError(''); setSuccess('');
         try {
             await createLoan({
-                user_id: parseInt(form.user_id),
+                staff_id: parseInt(form.staff_id),
                 amount: parseFloat(form.amount),
                 issued_date: form.issued_date,
                 notes: form.notes || null,
             });
-            setSuccess('Loan recorded');
-            setForm(f => ({ ...f, user_id: '', amount: '', notes: '' }));
+            setSuccess('Loan recorded and added to Expense book');
+            setForm(f => ({ ...f, staff_id: '', amount: '', notes: '' }));
             loadLoans();
         } catch (err) {
-            setError(err.response?.data?.detail || 'Failed to record loan');
+            setError(getErrorMessage(err, 'Failed to record loan'));
         } finally {
             setLoading(false);
         }
     };
 
     const submitRepay = async (loanId) => {
-        setError('');
-        setSuccess('');
+        setError(''); setSuccess('');
         try {
             await repayLoan(loanId, {
                 amount: parseFloat(repayForm.amount),
@@ -72,11 +71,11 @@ export default function Loans() {
             setRepayForm({ amount: '', paid_date: new Date().toISOString().split('T')[0] });
             loadLoans();
         } catch (err) {
-            setError(err.response?.data?.detail || 'Failed to record repayment');
+            setError(getErrorMessage(err, 'Failed to record repayment'));
         }
     };
 
-    const borrowerOptions = borrowers.map(b => ({ value: b.user_id, label: b.full_name }));
+    const borrowerOptions = borrowers.map(b => ({ value: b.staff_id, label: b.full_name }));
 
     return (
         <Layout>
@@ -88,8 +87,13 @@ export default function Loans() {
                     <form onSubmit={handleSubmit}>
                         <div style={ui.row2}>
                             <div style={ui.field}>
-                                <label style={ui.label}>Employee</label>
-                                <StyledSelect options={borrowerOptions} value={form.user_id} onChange={(v) => setForm(f => ({ ...f, user_id: v }))} placeholder="Select employee" />
+                                <label style={ui.label}>Staff Member</label>
+                                <StyledSelect
+                                    options={borrowerOptions}
+                                    value={form.staff_id}
+                                    onChange={(v) => setForm(f => ({ ...f, staff_id: v }))}
+                                    placeholder="Select staff member"
+                                />
                             </div>
                             <div style={ui.field}>
                                 <label style={ui.label}>Amount (GHS)</label>
@@ -120,7 +124,7 @@ export default function Loans() {
                 <table style={ui.table}>
                     <thead>
                         <tr>
-                            <th style={ui.th}>Employee</th>
+                            <th style={ui.th}>Staff Member</th>
                             <th style={ui.th}>Amount</th>
                             <th style={ui.th}>Paid</th>
                             <th style={ui.th}>Remaining</th>
@@ -133,9 +137,9 @@ export default function Loans() {
                         {loans.map(l => (
                             <tr key={l.loan_id} style={ui.tr}>
                                 <td style={ui.td}>{l.borrower}</td>
-                                <td style={ui.td}>{l.amount.toLocaleString()}</td>
-                                <td style={ui.td}>{l.paid.toLocaleString()}</td>
-                                <td style={ui.td}>{l.remaining.toLocaleString()}</td>
+                                <td style={ui.td}>₵{parseFloat(l.amount).toLocaleString()}</td>
+                                <td style={ui.td}>₵{parseFloat(l.paid).toLocaleString()}</td>
+                                <td style={ui.td}>₵{parseFloat(l.remaining).toLocaleString()}</td>
                                 <td style={ui.td}>{l.issued_date}</td>
                                 <td style={ui.td}>
                                     {l.settled
@@ -149,6 +153,9 @@ export default function Loans() {
                                                 <input type="number" placeholder="Amount" value={repayForm.amount}
                                                     onChange={e => setRepayForm(f => ({ ...f, amount: e.target.value }))}
                                                     style={styles.repayInput} min="0" step="0.01" />
+                                                <input type="date" value={repayForm.paid_date}
+                                                    onChange={e => setRepayForm(f => ({ ...f, paid_date: e.target.value }))}
+                                                    style={styles.repayInput} />
                                                 <button onClick={() => submitRepay(l.loan_id)} style={styles.saveBtn}>Save</button>
                                                 <button onClick={() => setRepayId(null)} style={styles.cancelBtn}>×</button>
                                             </span>
@@ -173,7 +180,7 @@ const styles = {
     settled: { fontSize: '12px', fontWeight: '500', color: '#15803d', backgroundColor: '#f0fdf4', padding: '2px 10px', borderRadius: '20px' },
     pending: { fontSize: '12px', fontWeight: '500', color: ui.colors.accent, backgroundColor: ui.colors.accentSoft, padding: '2px 10px', borderRadius: '20px' },
     repayBtn: { padding: '5px 12px', backgroundColor: '#fff', color: ui.colors.ink, border: `0.5px solid ${ui.colors.borderStrong}`, borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: '500' },
-    repayWrap: { display: 'inline-flex', alignItems: 'center', gap: '6px' },
+    repayWrap: { display: 'inline-flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' },
     repayInput: { padding: '5px 8px', border: `0.5px solid ${ui.colors.borderStrong}`, borderRadius: '6px', fontSize: '12px', width: '90px' },
     saveBtn: { padding: '5px 12px', backgroundColor: ui.colors.accent, color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: '500' },
     cancelBtn: { padding: '5px 9px', backgroundColor: '#fff', color: ui.colors.inkSoft, border: `0.5px solid ${ui.colors.borderStrong}`, borderRadius: '6px', cursor: 'pointer', fontSize: '12px' },
