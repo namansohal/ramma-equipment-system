@@ -39,6 +39,11 @@ class BulkDelete(BaseModel):
     ids: List[int]
 
 
+class BulkDateChange(BaseModel):
+    ids: List[int]
+    new_date: date
+
+
 def _current_location(db):
     return db.query(Location).filter(Location.is_current == True).first()
 
@@ -73,7 +78,6 @@ def _recompute_expense_balances(db: Session, location_id: int):
 
 
 def _delete_linked_expense(db: Session, transaction_id: int, deleted_by: int):
-    """When a Mainbook entry is deleted, also soft-delete its linked Expense row."""
     link = db.query(MainbookExpenseLink).filter(MainbookExpenseLink.transaction_id == transaction_id).first()
     if link:
         exp = db.query(Expense).filter(Expense.expense_id == link.expense_id, Expense.deleted_at == None).first()
@@ -202,6 +206,59 @@ def list_transactions(
             rows = [r for r in rows if r.txn_date <= to_date]
 
     return rows[skip: skip + limit]
+
+
+@router.patch("/bulk-date")
+def bulk_change_date(
+    data: BulkDateChange,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin)
+):
+    if not data.ids:
+        raise HTTPException(status_code=400, detail="No entries selected")
+
+    changed = 0
+    location_ids = set()
+    expense_location_ids = set()
+
+    for transaction_id in data.ids:
+        txn = db.query(MainbookTransaction).filter(
+            MainbookTransaction.transaction_id == transaction_id,
+            MainbookTransaction.deleted_at == None
+        ).first()
+        if not txn:
+            continue
+        old_date = txn.txn_date
+        txn.txn_date = data.new_date
+        location_ids.add(txn.location_id)
+        changed += 1
+
+        # Move the linked Expense entry's date too, so the two books stay in sync
+        link = db.query(MainbookExpenseLink).filter(MainbookExpenseLink.transaction_id == transaction_id).first()
+        if link:
+            exp = db.query(Expense).filter(Expense.expense_id == link.expense_id, Expense.deleted_at == None).first()
+            if exp:
+                exp.txn_date = data.new_date
+                expense_location_ids.add(exp.location_id)
+
+        # Move linked machine income date too
+        db.query(MachineIncome).filter(MachineIncome.transaction_id == transaction_id).update({"txn_date": data.new_date})
+
+        db.add(AuditLog(
+            table_name="mainbook_transactions",
+            record_id=txn.transaction_id,
+            action="UPDATE",
+            new_value=f"date: {old_date} -> {data.new_date} (bulk)",
+            changed_by=current_user.user_id,
+        ))
+
+    for loc_id in location_ids:
+        _recompute_mainbook_balances(db, loc_id)
+    for loc_id in expense_location_ids:
+        _recompute_expense_balances(db, loc_id)
+
+    db.commit()
+    return {"message": f"{changed} entry(ies) moved to {data.new_date}"}
 
 
 @router.patch("/{transaction_id}")

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import Layout from '../components/Layout';
 import StyledSelect from '../components/StyledSelect';
 import DescriptionInput from '../components/DescriptionInput';
-import { getMainbook, createMainbook, editMainbook, deleteMainbook, bulkDeleteMainbook, getMachines, extractReceipt, isViewer, isAdmin } from '../services/api';
+import { getMainbook, createMainbook, editMainbook, deleteMainbook, bulkDeleteMainbook, bulkChangeMainbookDate, getMachines, extractReceipt, isViewer, isAdmin } from '../services/api';
 import { getErrorMessage } from '../utils/errors';
 import * as ui from '../components/ui';
 
@@ -19,6 +19,8 @@ export default function Mainbook() {
     const [filterDate, setFilterDate] = useState('');
     const [selected, setSelected] = useState(new Set());
     const [confirmBulk, setConfirmBulk] = useState(false);
+    const [showDateChange, setShowDateChange] = useState(false);
+    const [bulkDate, setBulkDate] = useState(new Date().toISOString().split('T')[0]);
     const [editing, setEditing] = useState(null);
     const [editForm, setEditForm] = useState({ txn_date: '', description: '', amount: '' });
     const fileInputRef = useRef(null);
@@ -67,7 +69,7 @@ export default function Mainbook() {
         });
     };
 
-    const clearSelection = () => { setSelected(new Set()); setConfirmBulk(false); };
+    const clearSelection = () => { setSelected(new Set()); setConfirmBulk(false); setShowDateChange(false); };
 
     const handleReceiptUpload = async (e) => {
         const file = e.target.files[0];
@@ -223,6 +225,19 @@ export default function Mainbook() {
         } catch (err) {
             setError(getErrorMessage(err, 'Failed to delete selected'));
             setConfirmBulk(false);
+        }
+    };
+
+    const handleBulkDateChange = async () => {
+        setError(''); setSuccess('');
+        try {
+            const res = await bulkChangeMainbookDate(Array.from(selected), bulkDate);
+            setSuccess(res.data.message);
+            clearSelection();
+            loadRecords();
+        } catch (err) {
+            setError(getErrorMessage(err, 'Failed to change dates'));
+            setShowDateChange(false);
         }
     };
 
@@ -464,7 +479,14 @@ export default function Mainbook() {
                     <div style={ui.cardTitle}>Mainbook Ledger</div>
                     <div style={styles.filterWrap}>
                         {selected.size > 0 && !viewer && (
-                            confirmBulk ? (
+                            showDateChange ? (
+                                <span style={styles.wrap}>
+                                    <span style={styles.bulkText}>Move {selected.size} to:</span>
+                                    <input type="date" value={bulkDate} onChange={e => setBulkDate(e.target.value)} style={styles.filterInput} />
+                                    <button onClick={handleBulkDateChange} style={styles.yes}>Apply</button>
+                                    <button onClick={() => setShowDateChange(false)} style={styles.no}>Cancel</button>
+                                </span>
+                            ) : confirmBulk ? (
                                 <span style={styles.wrap}>
                                     <span style={styles.bulkText}>Delete {selected.size} selected?</span>
                                     <button onClick={handleBulkDelete} style={styles.yes}>Confirm</button>
@@ -473,6 +495,7 @@ export default function Mainbook() {
                             ) : (
                                 <span style={styles.wrap}>
                                     <span style={styles.bulkText}>{selected.size} selected</span>
+                                    {admin && <button onClick={() => setShowDateChange(true)} style={styles.editBtn}>Change Date</button>}
                                     <button onClick={() => setConfirmBulk(true)} style={styles.bulkDelBtn}>Delete Selected</button>
                                     <button onClick={clearSelection} style={styles.no}>Clear</button>
                                 </span>
@@ -572,7 +595,7 @@ const styles = {
     bulkDelBtn: { padding: '6px 14px', backgroundColor: ui.colors.accent, color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: '500' },
     del: { padding: '5px 12px', backgroundColor: '#fff', color: ui.colors.accent, border: `0.5px solid #f0c0c0`, borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: '500' },
     editBtn: { padding: '5px 12px', backgroundColor: '#fff', color: ui.colors.ink, border: `0.5px solid ${ui.colors.borderStrong}`, borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: '500' },
-    wrap: { display: 'inline-flex', gap: '6px', alignItems: 'center' },
+    wrap: { display: 'inline-flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' },
     yes: { padding: '5px 12px', backgroundColor: ui.colors.accent, color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: '500' },
     no: { padding: '5px 12px', backgroundColor: '#fff', color: ui.colors.inkSoft, border: `0.5px solid ${ui.colors.borderStrong}`, borderRadius: '6px', cursor: 'pointer', fontSize: '12px' },
     editInput: { padding: '6px 8px', border: `0.5px solid ${ui.colors.borderStrong}`, borderRadius: '6px', fontSize: '13px', width: '110px' },

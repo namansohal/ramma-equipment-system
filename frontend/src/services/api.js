@@ -26,6 +26,9 @@ export const deleteExpense = (id) => API.delete(`/expenses/${id}`);
 export const bulkDeleteExpenses = (ids) => API.delete('/expenses/bulk', { data: { ids } });
 export const getExpenseTypes = () => API.get('/expenses/types');
 
+export const bulkChangeExpenseDate = (ids, new_date) => API.patch('/expenses/bulk-date', { ids, new_date });
+export const bulkChangeMainbookDate = (ids, new_date) => API.patch('/mainbook/bulk-date', { ids, new_date });
+
 export const getParts = () => API.get('/stock/parts');
 export const getCurrentStock = () => API.get('/stock/current');
 export const getStockHistory = () => API.get('/stock/history');

@@ -21,6 +21,11 @@ class BulkDelete(BaseModel):
     ids: List[int]
 
 
+class BulkDateChange(BaseModel):
+    ids: List[int]
+    new_date: date
+
+
 def _ordered_expense_rows(db: Session, location_id: int):
     rows = db.query(Expense).filter(
         Expense.location_id == location_id,
@@ -53,8 +58,6 @@ def create_expense(
     if not expense_type:
         raise HTTPException(status_code=404, detail="Expense type not found")
 
-    # Loan type routes through the shared loan-creation logic instead of a plain expense —
-    # this creates BOTH the Loan record (tied to Staff) and the linked Expense-book row.
     if expense_type.code == "loan":
         if not data.staff_id:
             raise HTTPException(status_code=400, detail="Select which staff member this loan is for")
@@ -124,6 +127,42 @@ def get_expenses(
         rows = [r for r in rows if r.txn_date <= to_date]
 
     return rows[skip: skip + limit]
+
+
+@router.patch("/bulk-date")
+def bulk_change_date(
+    data: BulkDateChange,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin)
+):
+    if not data.ids:
+        raise HTTPException(status_code=400, detail="No entries selected")
+
+    changed = 0
+    location_ids = set()
+
+    for expense_id in data.ids:
+        expense = db.query(Expense).filter(Expense.expense_id == expense_id, Expense.deleted_at == None).first()
+        if not expense:
+            continue
+        old_date = expense.txn_date
+        expense.txn_date = data.new_date
+        location_ids.add(expense.location_id)
+        changed += 1
+
+        db.add(AuditLog(
+            table_name="expenses",
+            record_id=expense.expense_id,
+            action="UPDATE",
+            new_value=f"date: {old_date} -> {data.new_date} (bulk)",
+            changed_by=current_user.user_id,
+        ))
+
+    for loc_id in location_ids:
+        _recompute_expense_balances(db, loc_id)
+
+    db.commit()
+    return {"message": f"{changed} entry(ies) moved to {data.new_date}"}
 
 
 @router.patch("/{expense_id}")

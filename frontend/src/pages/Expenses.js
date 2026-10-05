@@ -3,7 +3,7 @@ import Layout from '../components/Layout';
 import PartPicker from '../components/PartPicker';
 import StyledSelect from '../components/StyledSelect';
 import DescriptionInput from '../components/DescriptionInput';
-import { createExpense, editExpense, getExpenses, getExpenseTypes, getMachines, deleteExpense, bulkDeleteExpenses, getParts, purchaseSparePart, extractReceipt, isViewer, isAdmin } from '../services/api';
+import { createExpense, editExpense, getExpenses, getExpenseTypes, getMachines, deleteExpense, bulkDeleteExpenses, bulkChangeExpenseDate, getParts, purchaseSparePart, extractReceipt, isViewer, isAdmin } from '../services/api';
 import { getErrorMessage } from '../utils/errors';
 import * as ui from '../components/ui';
 
@@ -21,6 +21,8 @@ export default function Expenses() {
     const [confirmId, setConfirmId] = useState(null);
     const [selected, setSelected] = useState(new Set());
     const [confirmBulk, setConfirmBulk] = useState(false);
+    const [showDateChange, setShowDateChange] = useState(false);
+    const [bulkDate, setBulkDate] = useState(new Date().toISOString().split('T')[0]);
     const [editing, setEditing] = useState(null);
     const [editForm, setEditForm] = useState({ txn_date: '', description: '', amount: '' });
     const fileInputRef = useRef(null);
@@ -83,7 +85,7 @@ export default function Expenses() {
         });
     };
 
-    const clearSelection = () => { setSelected(new Set()); setConfirmBulk(false); };
+    const clearSelection = () => { setSelected(new Set()); setConfirmBulk(false); setShowDateChange(false); };
 
     const defaultTypeId = () => {
         const common = types.find(t => t.code === 'common');
@@ -268,6 +270,19 @@ export default function Expenses() {
         } catch (err) {
             setError(getErrorMessage(err, 'Failed to delete selected'));
             setConfirmBulk(false);
+        }
+    };
+
+    const handleBulkDateChange = async () => {
+        setError(''); setSuccess('');
+        try {
+            const res = await bulkChangeExpenseDate(Array.from(selected), bulkDate);
+            setSuccess(res.data.message);
+            clearSelection();
+            loadExpenses();
+        } catch (err) {
+            setError(getErrorMessage(err, 'Failed to change dates'));
+            setShowDateChange(false);
         }
     };
 
@@ -507,7 +522,14 @@ export default function Expenses() {
                 <div style={styles.headRow}>
                     <div style={ui.cardTitle}>Recent Expenses</div>
                     {selected.size > 0 && !viewer && (
-                        confirmBulk ? (
+                        showDateChange ? (
+                            <span style={styles.wrap}>
+                                <span style={styles.bulkText}>Move {selected.size} to:</span>
+                                <input type="date" value={bulkDate} onChange={e => setBulkDate(e.target.value)} style={styles.dateInput} />
+                                <button onClick={handleBulkDateChange} style={styles.yes}>Apply</button>
+                                <button onClick={() => setShowDateChange(false)} style={styles.no}>Cancel</button>
+                            </span>
+                        ) : confirmBulk ? (
                             <span style={styles.wrap}>
                                 <span style={styles.bulkText}>Delete {selected.size} selected?</span>
                                 <button onClick={handleBulkDelete} style={styles.yes}>Confirm</button>
@@ -516,6 +538,7 @@ export default function Expenses() {
                         ) : (
                             <span style={styles.wrap}>
                                 <span style={styles.bulkText}>{selected.size} selected</span>
+                                {admin && <button onClick={() => setShowDateChange(true)} style={styles.dateBtn}>Change Date</button>}
                                 <button onClick={() => setConfirmBulk(true)} style={styles.bulkDelBtn}>Delete Selected</button>
                                 <button onClick={clearSelection} style={styles.no}>Clear</button>
                             </span>
@@ -606,9 +629,11 @@ const styles = {
     headRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px', flexWrap: 'wrap', gap: '10px' },
     bulkText: { fontSize: '12px', color: ui.colors.muted },
     bulkDelBtn: { padding: '6px 14px', backgroundColor: ui.colors.accent, color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: '500' },
+    dateBtn: { padding: '6px 14px', backgroundColor: '#fff', color: ui.colors.ink, border: `0.5px solid ${ui.colors.borderStrong}`, borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: '500' },
+    dateInput: { padding: '5px 8px', border: `0.5px solid ${ui.colors.borderStrong}`, borderRadius: '6px', fontSize: '12px' },
     del: { padding: '5px 12px', backgroundColor: '#fff', color: ui.colors.accent, border: `0.5px solid #f0c0c0`, borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: '500' },
     editBtn: { padding: '5px 12px', backgroundColor: '#fff', color: ui.colors.ink, border: `0.5px solid ${ui.colors.borderStrong}`, borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: '500' },
-    wrap: { display: 'inline-flex', gap: '6px', alignItems: 'center' },
+    wrap: { display: 'inline-flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' },
     yes: { padding: '5px 12px', backgroundColor: ui.colors.accent, color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: '500' },
     no: { padding: '5px 12px', backgroundColor: '#fff', color: ui.colors.inkSoft, border: `0.5px solid ${ui.colors.borderStrong}`, borderRadius: '6px', cursor: 'pointer', fontSize: '12px' },
     editInput: { padding: '6px 8px', border: `0.5px solid ${ui.colors.borderStrong}`, borderRadius: '6px', fontSize: '13px', width: '110px' },
