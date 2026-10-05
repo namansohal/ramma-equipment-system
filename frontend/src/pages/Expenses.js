@@ -28,6 +28,7 @@ export default function Expenses() {
     const fileInputRef = useRef(null);
 
     const [reviewRows, setReviewRows] = useState(null);
+    const [reviewAllDate, setReviewAllDate] = useState('');
     const [savingReview, setSavingReview] = useState(false);
 
     const [form, setForm] = useState({
@@ -96,7 +97,7 @@ export default function Expenses() {
         const file = e.target.files[0];
         if (!file) return;
         setExtracting(true);
-        setError(''); setSuccess(''); setReviewRows(null);
+        setError(''); setSuccess(''); setReviewRows(null); setReviewAllDate('');
         try {
             const res = await extractReceipt(file);
             const rows = res.data.rows || [];
@@ -134,6 +135,13 @@ export default function Expenses() {
         setReviewRows(rows => rows.map(r => r.key === key ? { ...r, [field]: value } : r));
     };
 
+    const applyDateToAll = (newDate) => {
+        setReviewAllDate(newDate);
+        if (newDate) {
+            setReviewRows(rows => rows.map(r => ({ ...r, date: newDate })));
+        }
+    };
+
     const toggleReviewRowMachine = (key, machineId) => {
         setReviewRows(rows => rows.map(r => {
             if (r.key !== key) return r;
@@ -148,6 +156,7 @@ export default function Expenses() {
 
     const cancelReview = () => {
         setReviewRows(null);
+        setReviewAllDate('');
         setSuccess('');
     };
 
@@ -198,6 +207,7 @@ export default function Expenses() {
 
         setSavingReview(false);
         setReviewRows(null);
+        setReviewAllDate('');
         if (failCount === 0) {
             setSuccess(`${successCount} expense(s) added successfully`);
         } else {
@@ -349,6 +359,10 @@ export default function Expenses() {
                             <div style={styles.reviewHeader}>
                                 <div style={styles.reviewTitle}>{success}</div>
                                 <button onClick={cancelReview} style={styles.reviewCancelAll}>Discard All</button>
+                            </div>
+                            <div style={styles.setAllRow}>
+                                <span style={styles.reviewExtraLabel}>Set all dates to:</span>
+                                <input type="date" value={reviewAllDate} onChange={e => applyDateToAll(e.target.value)} style={styles.reviewDateInput} />
                             </div>
                             <div style={styles.reviewTable}>
                                 {reviewRows.map(r => (
@@ -647,6 +661,7 @@ const styles = {
     reviewHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' },
     reviewTitle: { fontSize: '13px', fontWeight: '500', color: ui.colors.ink },
     reviewCancelAll: { padding: '5px 12px', backgroundColor: '#fff', color: ui.colors.inkSoft, border: `0.5px solid ${ui.colors.borderStrong}`, borderRadius: '6px', cursor: 'pointer', fontSize: '12px' },
+    setAllRow: { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px', padding: '8px 10px', backgroundColor: '#f5f3f0', borderRadius: '8px' },
     reviewTable: { display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '460px', overflowY: 'auto', marginBottom: '14px' },
     reviewRowWrap: { backgroundColor: '#fff', borderRadius: '8px', border: `0.5px solid ${ui.colors.border}`, padding: '8px' },
     reviewRowWrapOff: { backgroundColor: '#f5f3f0', borderRadius: '8px', border: `0.5px solid ${ui.colors.border}`, padding: '8px', opacity: 0.55 },
