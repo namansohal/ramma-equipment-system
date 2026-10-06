@@ -43,6 +43,8 @@ def create_loan_with_expense(db: Session, staff_id: int, amount: float, issued_d
     staff = db.query(Staff).filter(Staff.staff_id == staff_id, Staff.deleted_at == None).first()
     if not staff:
         raise HTTPException(status_code=404, detail="Staff member not found")
+    if not amount or amount <= 0:
+        raise HTTPException(status_code=400, detail="Loan amount must be more than zero")
 
     location = db.query(Location).filter(Location.is_current == True).first()
     if not location:
@@ -95,7 +97,7 @@ def create_loan_with_expense(db: Session, staff_id: int, amount: float, issued_d
 @router.get("/borrowers")
 def list_borrowers(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_editor)
 ):
     staff = db.query(Staff).filter(Staff.deleted_at == None, Staff.active == True).order_by(Staff.full_name).all()
     return [{"staff_id": s.staff_id, "full_name": s.full_name} for s in staff]
@@ -104,7 +106,7 @@ def list_borrowers(
 @router.get("/")
 def list_loans(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_editor)
 ):
     loans = db.query(Loan).filter(Loan.deleted_at == None).order_by(Loan.issued_date.desc()).all()
     result = []
@@ -146,6 +148,13 @@ def repay_loan(
     loan = db.query(Loan).filter(Loan.loan_id == loan_id, Loan.deleted_at == None).first()
     if not loan:
         raise HTTPException(status_code=404, detail="Loan not found")
+    if not data.amount or data.amount <= 0:
+        raise HTTPException(status_code=400, detail="Repayment must be more than zero")
+    paid = sum(float(p.amount) for p in db.query(LoanRepayment).filter(
+        LoanRepayment.loan_id == loan_id, LoanRepayment.deleted_at == None).all())
+    remaining = round(float(loan.amount) - paid, 2)
+    if data.amount > remaining + 0.005:
+        raise HTTPException(status_code=400, detail=f"Only ₵{remaining:,.2f} is still owed on this loan")
 
     location = db.query(Location).filter(Location.is_current == True).first()
     last_exp = db.query(Expense).filter(

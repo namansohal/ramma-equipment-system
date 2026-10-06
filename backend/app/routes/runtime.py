@@ -8,6 +8,7 @@ from app.models.runtime import MachineRuntime
 from app.models.machines import Machine
 from app.models.audit import AuditLog
 from app.auth import get_current_user
+from app.permissions import require_editor
 from app.models.users import User
 from app.permissions import require_admin
 
@@ -79,7 +80,7 @@ def list_runtime(
     machine_id: Optional[int] = None,
     limit: int = 200,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_editor)
 ):
     limit = min(limit, 500)
     query = db.query(MachineRuntime).filter(MachineRuntime.deleted_at == None)
@@ -124,12 +125,16 @@ def edit_runtime(
     if data.txn_date is not None and data.txn_date != entry.txn_date:
         changes.append(f"date: {entry.txn_date} -> {data.txn_date}")
         entry.txn_date = data.txn_date
-    if data.start_reading is not None and float(data.start_reading) != float(entry.start_reading or 0):
-        changes.append(f"start: {entry.start_reading} -> {data.start_reading}")
-        entry.start_reading = data.start_reading
-    if data.end_reading is not None and float(data.end_reading) != float(entry.end_reading or 0):
-        changes.append(f"end: {entry.end_reading} -> {data.end_reading}")
-        entry.end_reading = data.end_reading
+    # A reading sent as null clears it; a reading left out is unchanged.
+    sent = data.model_fields_set
+    for field, label in (("start_reading", "start"), ("end_reading", "end")):
+        if field in sent:
+            new, cur = getattr(data, field), getattr(entry, field)
+            if (None if new is None else float(new)) != (None if cur is None else float(cur)):
+                changes.append(f"{label}: {cur} -> {new}")
+                setattr(entry, field, new)
+    if entry.start_reading is not None and entry.end_reading is not None and float(entry.end_reading) < float(entry.start_reading):
+        raise HTTPException(status_code=400, detail="Closing reading cannot be less than starting reading")
     if data.amount is not None:
         if data.amount < 0:
             raise HTTPException(status_code=400, detail="Amount cannot be negative")

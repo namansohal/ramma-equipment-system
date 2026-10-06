@@ -59,6 +59,10 @@ def create_staff(
 ):
     if data.currency not in ("GHS", "INR"):
         raise HTTPException(status_code=400, detail="Currency must be GHS or INR")
+    if not (data.full_name or "").strip():
+        raise HTTPException(status_code=400, detail="Enter the staff member's name")
+    if data.monthly_salary is not None and data.monthly_salary < 0:
+        raise HTTPException(status_code=400, detail="Salary cannot be negative")
 
     s = Staff(
         full_name=data.full_name.strip(),
@@ -91,6 +95,15 @@ def update_staff(
     s = db.query(Staff).filter(Staff.staff_id == staff_id, Staff.deleted_at == None).first()
     if not s:
         raise HTTPException(status_code=404, detail="Staff not found")
+
+    if data.full_name is not None:
+        data.full_name = data.full_name.strip()
+        if not data.full_name:
+            raise HTTPException(status_code=400, detail="Name cannot be empty")
+    if data.currency is not None and data.currency not in ("GHS", "INR"):
+        raise HTTPException(status_code=400, detail="Currency must be GHS or INR")
+    if data.monthly_salary is not None and data.monthly_salary < 0:
+        raise HTTPException(status_code=400, detail="Salary cannot be negative")
 
     changes = []
     for field in ["full_name", "designation", "department", "monthly_salary", "currency", "join_date"]:

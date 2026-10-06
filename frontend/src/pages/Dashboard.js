@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
-import { getCurrentStock, getExpenses } from '../services/api';
+import { getCurrentStock, getExpenses, isViewer } from '../services/api';
 import * as ui from '../components/ui';
 import Icon from '../components/Icon';
 
@@ -15,6 +15,8 @@ const localToday = () => {
 
 export default function Dashboard() {
     const today = localToday();
+    // Viewers can't see money pages, so the dashboard shows them stock only.
+    const viewer = isViewer();
     const navigate = useNavigate();
     const user = JSON.parse(localStorage.getItem('user') || '{}');
     const [stock, setStock] = useState(null);
@@ -31,7 +33,7 @@ export default function Dashboard() {
             const [stockRes, expRes] = await Promise.all([
                 getCurrentStock(),
                 // Only today's rows: the full list is large and the dashboard doesn't need it.
-                getExpenses({ from_date: today, to_date: today }),
+                viewer ? Promise.resolve({ data: [] }) : getExpenses({ from_date: today, to_date: today }),
             ]);
             setStock(stockRes.data);
             setExpenses(expRes.data);
@@ -47,7 +49,7 @@ export default function Dashboard() {
     const todayExpenses = expenseList.filter(e => e.txn_date === today);
     const spentToday = todayExpenses.reduce((sum, e) => sum + parseFloat(e.debit || 0), 0);
     const receivedToday = todayExpenses.reduce((sum, e) => sum + parseFloat(e.credit || 0), 0);
-    const lowStock = stockList.filter(s => parseFloat(s.available) <= 5);
+    const lowStock = stockList.filter(s => s.low);
 
     const dateStr = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 
@@ -70,13 +72,16 @@ export default function Dashboard() {
                     <div className="rs-eyebrow">{dateStr} · Kade</div>
                     <h1 className="rs-title">Good day, {user.full_name?.split(' ')[0]}</h1>
                 </div>
-                <div style={styles.actions}>
-                    <button type="button" style={ui.btnSecondary} onClick={() => navigate('/mainbook')}>Mainbook entry</button>
-                    <button type="button" style={ui.btn} onClick={() => navigate('/expenses')}>+ New expense</button>
-                </div>
+                {!viewer && (
+                    <div style={styles.actions}>
+                        <button type="button" style={ui.btnSecondary} onClick={() => navigate('/mainbook')}>Mainbook entry</button>
+                        <button type="button" style={ui.btn} onClick={() => navigate('/expenses')}>+ New expense</button>
+                    </div>
+                )}
             </div>
 
             <div className="rs-stats">
+                {!viewer && (<>
                 <div style={{ ...ui.stat, borderTopColor: colors.brand }}>
                     <div style={ui.statLabel}>Spent today</div>
                     <div style={ui.statValue}>{show(money(spentToday))}</div>
@@ -89,9 +94,10 @@ export default function Dashboard() {
                     <div style={ui.statLabel}>Expenses today</div>
                     <div style={ui.statValue}>{show(todayExpenses.length)}</div>
                 </div>
+                </>)}
                 <div style={ui.stat}>
                     <div style={ui.statLabel}>Parts tracked</div>
-                    <div style={ui.statValue}>{show(stockList.length)}</div>
+                    <div style={ui.statValue}>{show(stockList.filter(s => s.ever_stocked).length)}</div>
                 </div>
                 <div style={{ ...ui.stat, borderTopColor: lowStock.length > 0 ? colors.accent : 'transparent' }}>
                     <div style={ui.statLabel}>Low stock</div>
@@ -99,7 +105,8 @@ export default function Dashboard() {
                 </div>
             </div>
 
-            <div className="rs-two">
+            <div className={viewer ? undefined : "rs-two"}>
+                {!viewer && (
                 <div style={ui.card}>
                     <div style={styles.cardHead}>
                         <h2 style={{ ...ui.cardTitle, marginBottom: 0 }}>Today's expenses</h2>
@@ -133,6 +140,7 @@ export default function Dashboard() {
                     )}
                 </div>
 
+                )}
                 <div>
                     <div style={ui.card}>
                         <div style={styles.cardHead}>
@@ -153,6 +161,7 @@ export default function Dashboard() {
                         )}
                     </div>
 
+                    {!viewer && (
                     <div style={ui.card}>
                         <h2 style={ui.cardTitle}>Quick actions</h2>
                         <div className="rs-quick">
@@ -167,6 +176,7 @@ export default function Dashboard() {
                             ))}
                         </div>
                     </div>
+                    )}
                 </div>
             </div>
         </Layout>

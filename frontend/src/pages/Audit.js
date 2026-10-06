@@ -53,6 +53,12 @@ export default function Audit() {
         { val: 'expenses', label: 'Expenses' },
         { val: 'mainbook_transactions', label: 'Mainbook' },
         { val: 'stock_transactions', label: 'Stock' },
+        { val: 'momo_transactions', label: 'MOMO' },
+        { val: 'machine_runtime', label: 'Runtime' },
+        { val: 'machine_downtime', label: 'Downtime' },
+        { val: 'loans', label: 'Loans' },
+        { val: 'staff', label: 'Staff' },
+        { val: 'customer_payments', label: 'Payments' },
         { val: 'users', label: 'Employees' },
     ];
 
@@ -95,7 +101,7 @@ export default function Audit() {
                                 </td>
                                 <td style={{ ...ui.td, textAlign: 'right' }}>
                                     {isOwner && l.action === 'DELETE' &&
-                                     ['expenses', 'mainbook_transactions', 'stock_transactions', 'momo_transactions', 'customer_payments'].includes(l.table) && (
+                                     ['expenses', 'mainbook_transactions', 'stock_transactions', 'momo_transactions', 'customer_payments', 'machine_runtime', 'machine_downtime', 'staff'].includes(l.table) && (
                                         <button onClick={() => restore(l)} style={styles.restoreBtn}>Restore</button>
                                     )}
                                 </td>

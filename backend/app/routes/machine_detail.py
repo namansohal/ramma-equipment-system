@@ -9,6 +9,7 @@ from app.models.machine_costs import MachinePartCost
 from app.models.machine_income import MachineIncome
 from app.machine_finance import expense_shares
 from app.auth import get_current_user
+from app.permissions import require_editor
 from app.models.users import User
 
 router = APIRouter(prefix="/machine-detail", tags=["Machine Detail"])
@@ -18,7 +19,7 @@ router = APIRouter(prefix="/machine-detail", tags=["Machine Detail"])
 def machine_detail(
     machine_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_editor)
 ):
     machine = db.query(Machine).filter(Machine.machine_id == machine_id).first()
     if not machine:

@@ -34,6 +34,7 @@ export const getCurrentStock = () => API.get('/stock/current');
 export const getStockHistory = () => API.get('/stock/history');
 export const createStockTxn = (data) => API.post('/stock/', data);
 export const deleteStockTxn = (id) => API.delete(`/stock/${id}`);
+export const setPartMinLevel = (partId, min_level) => API.put(`/stock/parts/${partId}/min-level`, { min_level });
 
 export const purchaseSparePart = (data) => API.post('/purchases/spare-part', data);
 export const getPurchaseHistory = (partId) => API.get(`/purchases/history/${partId}`);
@@ -53,6 +54,8 @@ export const changeRole = (userId, data) => API.post(`/users/${userId}/change-ro
 export const getDowntime = (params) => API.get('/downtime/', { params });
 export const createDowntime = (data) => API.post('/downtime/', data);
 export const endDowntime = (id, data) => API.patch(`/downtime/${id}/end`, data);
+export const editDowntime = (id, data) => API.patch(`/downtime/${id}`, data);
+export const deleteDowntime = (id) => API.delete(`/downtime/${id}`);
 
 export const getBorrowers = () => API.get('/loans/borrowers');
 export const getLoans = () => API.get('/loans/');

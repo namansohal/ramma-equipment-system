@@ -5,6 +5,7 @@ from app.database import get_db
 from app.models.expenses import Expense
 from app.models.mainbook import MainbookTransaction
 from app.auth import get_current_user
+from app.permissions import require_editor
 from app.models.users import User
 
 router = APIRouter(prefix="/suggestions", tags=["Suggestions"])
@@ -14,7 +15,7 @@ router = APIRouter(prefix="/suggestions", tags=["Suggestions"])
 def get_description_suggestions(
     source: str = "expenses",
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_editor)
 ):
     if source == "mainbook":
         rows = db.query(distinct(MainbookTransaction.description)).filter(
