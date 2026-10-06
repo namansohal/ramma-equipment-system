@@ -32,7 +32,7 @@ export default function Momo() {
         is_carry_forward: false,
     });
 
-    useEffect(() => { loadRecords(); }, [filterDate]);
+    useEffect(() => { loadRecords(); }, [filterDate]); // eslint-disable-line react-hooks/exhaustive-deps -- reload when the filter changes
 
     const loadRecords = async () => {
         try {

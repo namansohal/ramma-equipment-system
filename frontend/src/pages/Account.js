@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import Layout from '../components/Layout';
-import { changePassword, changeUsername } from '../services/api';
+import API, { changePassword, changeUsername } from '../services/api';
 import * as ui from '../components/ui';
 
 export default function Account() {
@@ -61,6 +61,26 @@ export default function Account() {
         }
     };
 
+    const [backingUp, setBackingUp] = useState(false);
+    const [backupMsg, setBackupMsg] = useState('');
+    const downloadBackup = async () => {
+        setBackingUp(true); setBackupMsg('');
+        try {
+            const res = await API.get('/backup/export', { responseType: 'blob' });
+            const name = (res.headers['content-disposition'] || '').match(/filename=([^;]+)/)?.[1] || 'ramma_backup.zip';
+            const url = window.URL.createObjectURL(new Blob([res.data]));
+            const a = document.createElement('a');
+            a.href = url; a.download = name;
+            document.body.appendChild(a); a.click(); a.remove();
+            window.URL.revokeObjectURL(url);
+            setBackupMsg('Backup downloaded. Keep it somewhere safe — it contains all company records.');
+        } catch {
+            setBackupMsg('Backup failed. Please try again.');
+        } finally {
+            setBackingUp(false);
+        }
+    };
+
     return (
         <Layout>
             <div style={styles.grid}>
@@ -112,6 +132,19 @@ export default function Account() {
                     </button>
                 </form>
             </div>
+            {user.role === 'owner' && (
+                <div style={{ ...ui.card, maxWidth: '640px' }}>
+                    <div style={ui.cardTitle}>Backup</div>
+                    <p style={{ margin: '0 0 14px', fontSize: '14px', color: ui.colors.muted, lineHeight: 1.5 }}>
+                        Download every record (ledgers, stock, machines, staff, customers, activity log) as one zip file.
+                        Passwords are not included.
+                    </p>
+                    <button type="button" style={backingUp ? ui.btnDisabled : ui.btn} onClick={downloadBackup} disabled={backingUp}>
+                        {backingUp ? 'Preparing backup...' : 'Download full backup'}
+                    </button>
+                    {backupMsg && <p style={{ margin: '12px 0 0', fontSize: '14px' }} role="status">{backupMsg}</p>}
+                </div>
+            )}
         </Layout>
     );
 }

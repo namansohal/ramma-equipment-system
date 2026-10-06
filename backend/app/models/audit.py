@@ -6,7 +6,7 @@ from app.database import Base
 class AuditLog(Base):
     __tablename__ = "audit_logs"
 
-    audit_id   = Column(BigInteger, primary_key=True, index=True)
+    audit_id   = Column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True, index=True)  # sqlite: tests only
     table_name = Column(String(50), nullable=False)
     record_id  = Column(Integer, nullable=False)
     action     = Column(String(10), nullable=False)  # CREATE UPDATE DELETE RESTORE

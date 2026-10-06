@@ -40,7 +40,7 @@ export default function Mainbook() {
         is_carry_forward: false,
     });
 
-    useEffect(() => { loadRecords(); loadMachines(); }, [filterDate]);
+    useEffect(() => { loadRecords(); loadMachines(); }, [filterDate]); // eslint-disable-line react-hooks/exhaustive-deps -- reload when the filter changes
 
     const loadRecords = async () => {
         try {
