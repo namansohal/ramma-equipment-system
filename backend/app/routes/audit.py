@@ -9,6 +9,7 @@ from app.models.expenses import Expense
 from app.models.mainbook import MainbookTransaction
 from app.models.stock import StockTransaction
 from app.models.momo import MomoTransaction
+from app.models.customers import CustomerPayment
 from app.models.links import MainbookExpenseLink
 from app.models.machine_income import MachineIncome
 from app.routes.momo import _recompute_balances as _recompute_momo_balances
@@ -108,6 +109,7 @@ def restore_record(
         "mainbook_transactions": MainbookTransaction,
         "stock_transactions": StockTransaction,
         "momo_transactions": MomoTransaction,
+        "customer_payments": CustomerPayment,
     }
     Model = model_map.get(table)
     if not Model:
@@ -118,6 +120,7 @@ def restore_record(
         "mainbook_transactions": "transaction_id",
         "stock_transactions": "stock_txn_id",
         "momo_transactions": "momo_id",
+        "customer_payments": "payment_id",
     }
     pk = pk_map[table]
 
