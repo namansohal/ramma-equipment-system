@@ -1,0 +1,47 @@
+# Nightly PostgreSQL backup, kept as a private build artifact for 30 days.
+# Setup (once): repository Settings → Secrets and variables → Actions →
+# New repository secret, name BACKUP_DATABASE_URL, value = the database's
+# direct / session connection string (postgresql://user:pass@host:5432/db).
+# Run it by hand any time from the Actions tab → "Nightly database backup" → Run workflow.
+name: Nightly database backup
+
+on:
+  schedule:
+    - cron: "17 2 * * *"   # 02:17 UTC every day
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL }}
+    steps:
+      - name: Check the secret is set
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::warning::No BACKUP_DATABASE_URL secret yet, so no backup was taken. See the comment at the top of .github/workflows/backup.yml."
+            echo "SKIP=1" >> "$GITHUB_ENV"
+          fi
+
+      - name: Dump the database
+        if: env.SKIP != '1'
+        run: |
+          # pg_dump wants plain postgresql://, not SQLAlchemy's postgresql+driver://
+          PGURL=$(printf '%s' "$DATABASE_URL" | sed -E 's#^postgres(ql)?(\+[a-z0-9]+)?://#postgresql://#')
+          FILE="ramma_$(date -u +%Y-%m-%d_%H%M).dump"
+          docker run --rm -e PGURL="$PGURL" postgres:17 \
+            sh -c 'pg_dump "$PGURL" --format=custom --no-owner --no-privileges' > "$FILE"
+          test -s "$FILE"
+          ls -lh "$FILE"
+
+      - name: Keep the backup
+        if: env.SKIP != '1'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ramma-db-backup-${{ github.run_number }}
+          path: ramma_*.dump
+          retention-days: 30
+          if-no-files-found: error

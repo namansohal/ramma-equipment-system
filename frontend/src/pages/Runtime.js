@@ -30,7 +30,7 @@ export default function Runtime() {
         status_note: '',
     });
 
-    useEffect(() => { loadRecords(); loadMachines(); }, [filterMachine]);
+    useEffect(() => { loadRecords(); loadMachines(); }, [filterMachine]); // eslint-disable-line react-hooks/exhaustive-deps -- reload when the filter changes
 
     const loadRecords = async () => {
         try {

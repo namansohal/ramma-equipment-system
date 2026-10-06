@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import Layout from '../components/Layout';
-import { getAlerts, markAlertRead, deleteAlert, currentUser, isAdmin } from '../services/api';
+import { getAlerts, markAlertRead, deleteAlert, isAdmin } from '../services/api';
 import * as ui from '../components/ui';
 
 export default function Alerts() {
-    const user = currentUser();
     const admin = isAdmin();
     const [alerts, setAlerts] = useState([]);
     const [error, setError] = useState('');

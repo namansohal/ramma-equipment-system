@@ -11,7 +11,7 @@ export default function Audit() {
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
 
-    useEffect(() => { load(); }, [filter]);
+    useEffect(() => { load(); }, [filter]); // eslint-disable-line react-hooks/exhaustive-deps -- reload when the filter changes
 
     const load = async () => {
         try {
