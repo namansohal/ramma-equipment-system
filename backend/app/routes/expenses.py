@@ -119,12 +119,18 @@ def get_expenses(
     if not location:
         return []
 
-    rows = _ordered_expense_rows(db, location.location_id)
-
+    # Filter dates in the database so a date-ranged request (e.g. the dashboard's
+    # "today") doesn't load every expense ever recorded.
+    query = db.query(Expense).filter(
+        Expense.location_id == location.location_id,
+        Expense.deleted_at == None
+    )
     if from_date:
-        rows = [r for r in rows if r.txn_date >= from_date]
+        query = query.filter(Expense.txn_date >= from_date)
     if to_date:
-        rows = [r for r in rows if r.txn_date <= to_date]
+        query = query.filter(Expense.txn_date <= to_date)
+    rows = query.all()
+    rows.sort(key=lambda r: (r.txn_date, 0 if r.is_carry_forward else 1, r.expense_id))
 
     return rows[skip: skip + limit]
 

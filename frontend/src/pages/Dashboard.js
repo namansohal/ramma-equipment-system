@@ -7,7 +7,14 @@ import Icon from '../components/Icon';
 
 const { colors } = ui;
 
+// Local calendar date (YYYY-MM-DD), not UTC.
+const localToday = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
 export default function Dashboard() {
+    const today = localToday();
     const navigate = useNavigate();
     const user = JSON.parse(localStorage.getItem('user') || '{}');
     const [stock, setStock] = useState(null);
@@ -16,14 +23,15 @@ export default function Dashboard() {
 
     useEffect(() => {
         loadData();
-    }, []);
+    }, []); // eslint-disable-line react-hooks/exhaustive-deps -- load once on open
 
     const loadData = async () => {
         setLoaded(false);
         try {
             const [stockRes, expRes] = await Promise.all([
                 getCurrentStock(),
-                getExpenses(),
+                // Only today's rows: the full list is large and the dashboard doesn't need it.
+                getExpenses({ from_date: today, to_date: today }),
             ]);
             setStock(stockRes.data);
             setExpenses(expRes.data);
@@ -34,7 +42,6 @@ export default function Dashboard() {
         }
     };
 
-    const today = new Date().toISOString().split('T')[0];
     const stockList = stock || [];
     const expenseList = expenses || [];
     const todayExpenses = expenseList.filter(e => e.txn_date === today);

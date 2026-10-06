@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { login } from '../services/api';
 import * as ui from '../components/ui';
@@ -10,7 +10,16 @@ export default function Login() {
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
+    const [slow, setSlow] = useState(false);
     const navigate = useNavigate();
+
+    // The free Render server sleeps when idle and takes up to a minute to wake.
+    // Say so instead of leaving people staring at "Signing in...".
+    useEffect(() => {
+        if (!loading) { setSlow(false); return; }
+        const t = setTimeout(() => setSlow(true), 4000);
+        return () => clearTimeout(t);
+    }, [loading]);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -73,6 +82,11 @@ export default function Login() {
                     >
                         {loading ? 'Signing in...' : 'Sign in'}
                     </button>
+                    {slow && (
+                        <div style={styles.slow} role="status">
+                            The server is waking up — this can take up to a minute the first time. Please wait.
+                        </div>
+                    )}
                     <div style={styles.footer}>Ramma Equipment Co. · Kade</div>
                 </form>
             </div>
@@ -89,5 +103,6 @@ const styles = {
     subtitle: { margin: '2px 0 0', fontSize: '14px', fontWeight: '500', color: colors.ink },
     body: { padding: '28px', display: 'flex', flexDirection: 'column', gap: '16px' },
     error: { ...ui.alertError, marginBottom: 0, fontSize: '14px' },
+    slow: { backgroundColor: colors.brandSoft, color: colors.ink, fontSize: '14px', fontWeight: '500', padding: '10px 12px', borderRadius: '4px' },
     footer: { textAlign: 'center', fontSize: '13px', color: colors.muted },
 };
