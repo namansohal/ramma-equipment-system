@@ -1,117 +1,139 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { colors } from './ui';
+import Icon from './Icon';
+import { getUnreadAlertCount } from '../services/api';
+
+const NAV_GROUPS = [
+    {
+        name: 'Daily work',
+        items: [
+            { path: '/dashboard', label: 'Dashboard', icon: 'dashboard' },
+            { path: '/mainbook', label: 'Mainbook', icon: 'book' },
+            { path: '/expenses', label: 'Expenses', icon: 'receipt' },
+            { path: '/momo', label: 'MOMO', icon: 'phone' },
+        ],
+    },
+    {
+        name: 'Machines',
+        items: [
+            { path: '/runtime', label: 'Runtime', icon: 'clock' },
+            { path: '/downtime', label: 'Downtime', icon: 'warn' },
+            { path: '/stock', label: 'Spare Parts', icon: 'gear' },
+            { path: '/machines', label: 'Machines', icon: 'truck' },
+        ],
+    },
+    {
+        name: 'People & money',
+        items: [
+            { path: '/loans', label: 'Loans', icon: 'coins' },
+            { path: '/reports', label: 'Reports', icon: 'chart' },
+        ],
+    },
+    {
+        name: 'Admin',
+        adminOnly: true,
+        items: [
+            { path: '/audit', label: 'Activity Log', icon: 'list' },
+            { path: '/staff', label: 'Staff', icon: 'people' },
+            { path: '/users', label: 'Users', icon: 'userplus' },
+        ],
+    },
+];
+
+const EXTRA_TITLES = { '/account': ['Account', 'My Account'], '/alerts': ['Notifications', 'Alerts'] };
 
 export default function Layout({ children }) {
     const navigate = useNavigate();
     const location = useLocation();
     const user = JSON.parse(localStorage.getItem('user') || '{}');
     const isAdmin = user.role === 'owner' || user.role === 'manager';
+    const [unread, setUnread] = useState(0);
+
+    useEffect(() => {
+        getUnreadAlertCount().then(res => setUnread(res.data.count || 0)).catch(() => {});
+    }, [location.pathname]);
 
     const logout = () => {
         localStorage.clear();
         navigate('/login');
     };
 
-    const navItems = [
-        { path: '/dashboard', label: 'Dashboard', icon: '▦' },
-        { path: '/mainbook', label: 'Mainbook', icon: '❐' },
-        { path: '/expenses', label: 'Expenses', icon: '₵' },
-        { path: '/momo', label: 'MOMO', icon: '▥' },
-        { path: '/runtime', label: 'Runtime', icon: '◷' },
-        { path: '/downtime', label: 'Downtime', icon: '◔' },
-        { path: '/stock', label: 'Spare Parts', icon: '⚙' },
-        { path: '/loans', label: 'Loans', icon: '◎' },
-        { path: '/machines', label: 'Machines', icon: '⬢' },
-        { path: '/reports', label: 'Reports', icon: '▤' },
-    ];
-    if (isAdmin) {
-        navItems.push({ path: '/audit', label: 'Activity Log', icon: '☰' });
-        navItems.push({ path: '/staff', label: 'Staff', icon: '▣' });
-        navItems.push({ path: '/users', label: 'Users', icon: '◈' });
+    const groups = NAV_GROUPS.filter(g => !g.adminOnly || isAdmin);
+
+    // Machine detail pages live under /machines/:id and highlight "Machines".
+    const isActive = (path) => location.pathname === path || (path === '/machines' && location.pathname.startsWith('/machines/'));
+
+    let eyebrow = '';
+    let title = '';
+    for (const g of groups) {
+        const hit = g.items.find(i => isActive(i.path));
+        if (hit) { eyebrow = g.name; title = hit.label; }
     }
-    
-    const roleName = (user.role || '').charAt(0).toUpperCase() + (user.role || '').slice(1);
-    const showRoleSeparately = (user.full_name || '').toLowerCase() !== (user.role || '').toLowerCase();
+    if (EXTRA_TITLES[location.pathname]) [eyebrow, title] = EXTRA_TITLES[location.pathname];
+    // The dashboard draws its own greeting header.
+    const showHeader = title && location.pathname !== '/dashboard';
+
+    const roleName = (user.role || '').replace('_', ' ').replace(/^\w/, c => c.toUpperCase());
+
+    const NavLink = ({ path, label, icon, badge }) => (
+        <a
+            href={path}
+            className={`rs-link${isActive(path) ? ' active' : ''}`}
+            aria-current={isActive(path) ? 'page' : undefined}
+            onClick={e => { e.preventDefault(); navigate(path); }}
+        >
+            <Icon name={icon} />
+            {label}
+            {badge > 0 && <span className="rs-badge">{badge}</span>}
+        </a>
+    );
 
     return (
-        <div style={styles.shell}>
-            <aside style={styles.sidebar}>
-                <div style={styles.brand}>
-                    <img src="/logo_r.jpeg" alt="Ramma" style={styles.logoImg} />
+        <div className="rs-shell">
+            <aside className="rs-side">
+                <div className="rs-brand">
+                    <img src="/logo_r.jpeg" alt="" className="rs-logo" />
                     <div>
-                        <div style={styles.brandName}>Ramma</div>
-                        <div style={styles.brandSub}>Equipment Co.</div>
+                        <div className="rs-brand-name">Ramma</div>
+                        <div className="rs-brand-sub">Equipment Co.</div>
                     </div>
                 </div>
 
-                <nav style={styles.nav}>
-                    {navItems.map(item => {
-                        const active = location.pathname === item.path;
-                        return (
-                            <div
-                                key={item.path}
-                                onClick={() => navigate(item.path)}
-                                style={active ? styles.navItemActive : styles.navItem}
-                            >
-                                <span style={styles.navIcon}>{item.icon}</span>
-                                {item.label}
-                            </div>
-                        );
-                    })}
+                <nav className="rs-nav" aria-label="Main">
+                    {groups.map(g => (
+                        <React.Fragment key={g.name}>
+                            <div className="rs-group">{g.name}</div>
+                            {g.items.map(item => <NavLink key={item.path} {...item} />)}
+                        </React.Fragment>
+                    ))}
                 </nav>
 
-                <div style={styles.sidebarFooter}>
-                    <div onClick={() => navigate('/account')} style={styles.navItem}>
-                        <span style={styles.navIcon}>⚿</span>
-                        My Account
-                    </div>
-                    <div style={styles.userCard}>
-                        <div style={styles.avatar}>{(user.full_name || 'U').charAt(0).toUpperCase()}</div>
-                        <div style={styles.userMeta}>
-                            <div style={styles.userName}>{user.full_name}</div>
-                            {showRoleSeparately && <div style={styles.userRole}>{roleName}</div>}
+                <div className="rs-foot">
+                    <NavLink path="/alerts" label="Alerts" icon="bell" badge={unread} />
+                    <NavLink path="/account" label="My Account" icon="key" />
+                    <button type="button" className="rs-link" onClick={logout}>
+                        <Icon name="logout" />
+                        Log out
+                    </button>
+                    <div className="rs-who">
+                        <div className="rs-avatar">{(user.full_name || 'U').charAt(0).toUpperCase()}</div>
+                        <div style={{ minWidth: 0 }}>
+                            <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{user.full_name}</div>
+                            <small>{roleName}</small>
                         </div>
-                        <button onClick={logout} style={styles.logout} title="Logout">⏻</button>
                     </div>
                 </div>
             </aside>
 
-            <div style={styles.main}>
-                <header style={styles.topbar}>
-                    <div style={styles.pageTitle}>
-                        {navItems.find(n => n.path === location.pathname)?.label ||
-                            (location.pathname === '/account' ? 'My Account' : '')}
+            <main className="rs-main">
+                {showHeader && (
+                    <div className="rs-head">
+                        <div className="rs-eyebrow">{eyebrow}</div>
+                        <h1 className="rs-title">{title}</h1>
                     </div>
-                </header>
-                <div style={styles.content}>
-                    {children}
-                </div>
-            </div>
+                )}
+                {children}
+            </main>
         </div>
     );
 }
-
-const styles = {
-    shell: { display: 'flex', minHeight: '100vh', backgroundColor: colors.page, fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' },
-    sidebar: { width: '210px', minWidth: '210px', backgroundColor: '#fff', borderRight: `0.5px solid ${colors.border}`, display: 'flex', flexDirection: 'column', position: 'fixed', height: '100vh', left: 0, top: 0, zIndex: 20 },
-    brand: { display: 'flex', alignItems: 'center', gap: '11px', padding: '18px 20px 16px' },
-    logoImg: { width: '38px', height: '38px', borderRadius: '8px', objectFit: 'cover' },
-    brandName: { color: colors.ink, fontWeight: '500', fontSize: '16px', letterSpacing: '-0.3px', lineHeight: '1.2' },
-    brandSub: { color: colors.muted, fontSize: '11px' },
-    nav: { padding: '4px 14px', flex: 1, overflowY: 'auto' },
-    navItem: { display: 'flex', alignItems: 'center', gap: '11px', padding: '9px 12px', color: colors.inkSoft, borderRadius: '8px', cursor: 'pointer', marginBottom: '2px', fontSize: '13px', fontWeight: '400' },
-    navItemActive: { display: 'flex', alignItems: 'center', gap: '11px', padding: '9px 9px', color: colors.ink, backgroundColor: '#f5f3f0', borderRadius: '8px', cursor: 'pointer', marginBottom: '2px', fontSize: '13px', fontWeight: '500', borderLeft: `3px solid ${colors.accent}` },
-    navIcon: { fontSize: '15px', width: '18px', textAlign: 'center' },
-    sidebarFooter: { padding: '10px 14px 14px', borderTop: `0.5px solid ${colors.border}` },
-    userCard: { display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 8px 4px', marginTop: '4px' },
-    userMeta: { flex: 1, minWidth: 0 },
-    userName: { fontSize: '13px', fontWeight: '500', color: colors.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' },
-    userRole: { fontSize: '11px', color: colors.muted },
-    avatar: { width: '32px', height: '32px', backgroundColor: colors.accent, color: '#fff', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '500', fontSize: '13px', flexShrink: 0 },
-    logout: { width: '28px', height: '28px', backgroundColor: '#fff', color: colors.inkSoft, border: `0.5px solid ${colors.borderStrong}`, borderRadius: '6px', cursor: 'pointer', fontSize: '14px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' },
-    main: { flex: 1, marginLeft: '210px', minWidth: 0, display: 'flex', flexDirection: 'column' },
-    topbar: { height: '60px', backgroundColor: '#fff', borderBottom: `0.5px solid ${colors.border}`, display: 'flex', alignItems: 'center', padding: '0 28px', position: 'sticky', top: 0, zIndex: 10 },
-    pageTitle: { fontSize: '17px', fontWeight: '500', color: colors.ink },
-    content: { padding: '28px 32px', flex: 1, minWidth: 0 },
-};  

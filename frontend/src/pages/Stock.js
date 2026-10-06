@@ -425,7 +425,7 @@ export default function Stock() {
 const styles = {
     tabRow: { display: 'flex', gap: '8px', marginBottom: '18px' },
     tab: { padding: '9px 16px', backgroundColor: '#fff', color: ui.colors.inkSoft, border: `0.5px solid ${ui.colors.borderStrong}`, borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '500' },
-    tabActive: { padding: '9px 16px', backgroundColor: ui.colors.accentSoft, color: ui.colors.accent, border: `0.5px solid ${ui.colors.accent}`, borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '500' },
+    tabActive: { padding: '9px 16px', backgroundColor: ui.colors.ink, color: '#fff', border: `1px solid ${ui.colors.ink}`, borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '500' },
     hint: { fontSize: '12px', color: ui.colors.muted, marginBottom: '14px' },
     totalHint: { fontSize: '13px', color: ui.colors.ink, fontWeight: '500', marginBottom: '14px', marginTop: '-6px' },
     lowBadge: { fontSize: '13px', fontWeight: '500', color: ui.colors.accent, backgroundColor: ui.colors.accentSoft, padding: '2px 10px', borderRadius: '20px' },

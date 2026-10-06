@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { login } from '../services/api';
-import { colors } from '../components/ui';
+import * as ui from '../components/ui';
+
+const { colors } = ui;
 
 export default function Login() {
     const [username, setUsername] = useState('');
@@ -20,7 +22,9 @@ export default function Login() {
             localStorage.setItem('user', JSON.stringify(res.data.user));
             navigate('/dashboard');
         } catch (err) {
-            setError('Incorrect username or password');
+            setError(err.response?.status === 429
+                ? err.response.data?.detail || 'Too many failed attempts. Try again later.'
+                : 'Incorrect username or password');
         } finally {
             setLoading(false);
         }
@@ -29,59 +33,61 @@ export default function Login() {
     return (
         <div style={styles.container}>
             <div style={styles.box}>
-                <div style={styles.logoRow}>
+                <div style={styles.top}>
                     <img src="/logo_r.jpeg" alt="Ramma" style={styles.logo} />
+                    <div>
+                        <h1 style={styles.title}>Ramma Equipment</h1>
+                        <p style={styles.subtitle}>Company Management System</p>
+                    </div>
                 </div>
-                <h2 style={styles.title}>Ramma Equipment</h2>
-                <p style={styles.subtitle}>Company Management System</p>
-                {error && <div style={styles.error}>{error}</div>}
-                <form onSubmit={handleSubmit}>
-                    <div style={styles.field}>
-                        <label style={styles.label}>Username</label>
+                <form onSubmit={handleSubmit} style={styles.body}>
+                    {error && <div style={styles.error} role="alert">{error}</div>}
+                    <div>
+                        <label style={ui.label} htmlFor="login-username">Username</label>
                         <input
-                            style={styles.input}
+                            id="login-username"
+                            style={ui.input}
                             type="text"
+                            autoComplete="username"
                             value={username}
                             onChange={e => setUsername(e.target.value)}
                             required
                         />
                     </div>
-                    <div style={styles.field}>
-                        <label style={styles.label}>Password</label>
+                    <div>
+                        <label style={ui.label} htmlFor="login-password">Password</label>
                         <input
-                            style={styles.input}
+                            id="login-password"
+                            style={ui.input}
                             type="password"
+                            autoComplete="current-password"
                             value={password}
                             onChange={e => setPassword(e.target.value)}
                             required
                         />
                     </div>
                     <button
-                        style={loading ? styles.buttonDisabled : styles.button}
+                        style={{ ...(loading ? ui.btnDisabled : ui.btn), width: '100%', minHeight: '48px', fontSize: '16px' }}
                         type="submit"
                         disabled={loading}
                     >
-                        {loading ? 'Signing in...' : 'Sign In'}
+                        {loading ? 'Signing in...' : 'Sign in'}
                     </button>
+                    <div style={styles.footer}>Ramma Equipment Co. · Kade</div>
                 </form>
             </div>
-            <div style={styles.footer}>Ramma Equipment Co. · Kade</div>
         </div>
     );
 }
 
 const styles = {
-    container: { display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', height: '100vh', backgroundColor: colors.page, fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' },
-    box: { backgroundColor: '#fff', padding: '40px', borderRadius: '14px', border: `0.5px solid ${colors.border}`, width: '360px' },
-    logoRow: { display: 'flex', justifyContent: 'center', marginBottom: '18px' },
-    logo: { width: '56px', height: '56px', borderRadius: '12px', objectFit: 'cover' },
-    title: { margin: 0, fontSize: '22px', fontWeight: '500', color: colors.ink, textAlign: 'center', letterSpacing: '-0.3px' },
-    subtitle: { textAlign: 'center', color: colors.muted, marginTop: '4px', marginBottom: '28px', fontSize: '13px' },
-    error: { backgroundColor: colors.accentSoft, border: '0.5px solid #fecaca', color: colors.accent, padding: '10px 14px', borderRadius: '8px', marginBottom: '18px', fontSize: '13px' },
-    field: { marginBottom: '18px' },
-    label: { display: 'block', marginBottom: '6px', fontWeight: '500', color: colors.inkSoft, fontSize: '13px' },
-    input: { width: '100%', padding: '11px 12px', border: `0.5px solid ${colors.borderStrong}`, borderRadius: '8px', fontSize: '14px', boxSizing: 'border-box', outline: 'none', color: colors.ink },
-    button: { width: '100%', padding: '12px', backgroundColor: colors.accent, color: '#fff', border: 'none', borderRadius: '8px', fontSize: '15px', fontWeight: '500', cursor: 'pointer', marginTop: '4px' },
-    buttonDisabled: { width: '100%', padding: '12px', backgroundColor: '#e6a5a5', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '15px', fontWeight: '500', cursor: 'not-allowed', marginTop: '4px' },
-    footer: { marginTop: '20px', fontSize: '12px', color: colors.muted },
+    container: { display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', padding: '24px', boxSizing: 'border-box', backgroundColor: colors.side, backgroundImage: 'repeating-linear-gradient(135deg, transparent 0 22px, rgba(255,255,255,0.025) 22px 44px)' },
+    box: { backgroundColor: '#fff', borderRadius: '6px', overflow: 'hidden', width: '100%', maxWidth: '400px' },
+    top: { backgroundColor: colors.brand, padding: '24px 28px', display: 'flex', alignItems: 'center', gap: '14px' },
+    logo: { width: '52px', height: '52px', borderRadius: '4px', objectFit: 'cover', flexShrink: 0 },
+    title: { margin: 0, fontFamily: ui.condensed, fontSize: '26px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.03em', color: colors.ink, lineHeight: 1.1 },
+    subtitle: { margin: '2px 0 0', fontSize: '14px', fontWeight: '500', color: colors.ink },
+    body: { padding: '28px', display: 'flex', flexDirection: 'column', gap: '16px' },
+    error: { ...ui.alertError, marginBottom: 0, fontSize: '14px' },
+    footer: { textAlign: 'center', fontSize: '13px', color: colors.muted },
 };

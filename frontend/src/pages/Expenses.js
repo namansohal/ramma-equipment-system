@@ -636,7 +636,7 @@ export default function Expenses() {
 const styles = {
     chipRow: { display: 'flex', flexWrap: 'wrap', gap: '8px' },
     chip: { padding: '8px 16px', border: `0.5px solid ${ui.colors.borderStrong}`, borderRadius: '8px', cursor: 'pointer', backgroundColor: '#fff', userSelect: 'none', fontSize: '13px', color: ui.colors.ink },
-    chipActive: { padding: '8px 16px', border: `0.5px solid ${ui.colors.accent}`, borderRadius: '8px', cursor: 'pointer', backgroundColor: ui.colors.accentSoft, color: ui.colors.accent, userSelect: 'none', fontSize: '13px', fontWeight: '500' },
+    chipActive: { padding: '8px 16px', border: `1px solid ${ui.colors.ink}`, borderRadius: '8px', cursor: 'pointer', backgroundColor: ui.colors.ink, color: '#fff', userSelect: 'none', fontSize: '13px', fontWeight: '500' },
     hint: { fontSize: '12px', color: ui.colors.muted, marginBottom: '14px' },
     totalHint: { fontSize: '13px', color: ui.colors.ink, fontWeight: '500', marginBottom: '14px', marginTop: '-6px' },
     checkboxLabel: { display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: ui.colors.ink, cursor: 'pointer' },
@@ -677,7 +677,7 @@ const styles = {
     reviewExtraLabel: { fontSize: '12px', color: ui.colors.inkSoft, whiteSpace: 'nowrap' },
     reviewMachineChips: { display: 'flex', flexWrap: 'wrap', gap: '5px' },
     reviewChip: { padding: '3px 10px', border: `0.5px solid ${ui.colors.borderStrong}`, borderRadius: '20px', cursor: 'pointer', backgroundColor: '#fff', fontSize: '11px', color: ui.colors.ink },
-    reviewChipActive: { padding: '3px 10px', border: `0.5px solid ${ui.colors.accent}`, borderRadius: '20px', cursor: 'pointer', backgroundColor: ui.colors.accentSoft, color: ui.colors.accent, fontSize: '11px', fontWeight: '500' },
+    reviewChipActive: { padding: '3px 10px', border: `1px solid ${ui.colors.ink}`, borderRadius: '20px', cursor: 'pointer', backgroundColor: ui.colors.ink, color: '#fff', fontSize: '11px', fontWeight: '500' },
     reviewFooter: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
     reviewCount: { fontSize: '12px', color: ui.colors.muted },
 };

@@ -26,25 +26,25 @@ export default function MachineDetail() {
         <Layout>
             <div style={styles.head}>
                 <button onClick={() => navigate('/machines')} style={ui.btnSecondary}>← All Machines</button>
-                <div style={styles.machineCode}>{data.machine.code}</div>
+                <h2 style={styles.machineCode}>{data.machine.code}</h2>
             </div>
 
             <div style={styles.statGrid}>
                 <div style={styles.stat}>
-                    <div style={styles.statLabel}>DISTINCT PARTS USED</div>
+                    <div style={styles.statLabel}>Distinct parts used</div>
                     <div style={styles.statValue}>{data.summary.distinct_parts}</div>
                 </div>
                 <div style={styles.stat}>
-                    <div style={styles.statLabel}>TOTAL INCOME</div>
+                    <div style={styles.statLabel}>Total income</div>
                     <div style={styles.statValue}>₵{data.summary.total_income.toLocaleString()}</div>
                 </div>
-                <div style={{ ...styles.stat, borderTop: `2px solid ${colors.accent}` }}>
-                    <div style={styles.statLabel}>TOTAL EXPENSES</div>
+                <div style={{ ...styles.stat, borderTopColor: colors.accent }}>
+                    <div style={styles.statLabel}>Total expenses</div>
                     <div style={styles.statValue}>₵{data.summary.total_expense.toLocaleString()}</div>
                 </div>
-                <div style={{ ...styles.stat, borderTop: `2px solid ${profitPositive ? '#15803d' : colors.accent}` }}>
-                    <div style={styles.statLabel}>PROFIT</div>
-                    <div style={{ ...styles.statValue, color: profitPositive ? '#15803d' : colors.accent }}>
+                <div style={{ ...styles.stat, borderTopColor: profitPositive ? '#15803D' : colors.accent }}>
+                    <div style={styles.statLabel}>Profit</div>
+                    <div style={{ ...styles.statValue, color: profitPositive ? colors.green : colors.accent }}>
                         ₵{data.summary.profit.toLocaleString()}
                     </div>
                 </div>
@@ -120,10 +120,10 @@ export default function MachineDetail() {
 
 const styles = {
     head: { display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '20px' },
-    machineCode: { fontSize: '24px', fontWeight: '500', color: colors.ink, letterSpacing: '-0.5px' },
-    statGrid: { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1px', backgroundColor: colors.border, border: `0.5px solid ${colors.border}`, borderRadius: '12px', overflow: 'hidden', marginBottom: '20px' },
-    stat: { backgroundColor: '#fff', padding: '18px 20px' },
-    statLabel: { fontSize: '11px', color: colors.muted, marginBottom: '8px', letterSpacing: '0.3px' },
-    statValue: { fontSize: '22px', fontWeight: '500', color: colors.ink, letterSpacing: '-0.5px', lineHeight: '1' },
-    twoCol: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' },
+    machineCode: { margin: 0, fontFamily: ui.condensed, fontSize: '36px', fontWeight: '700', color: colors.ink, lineHeight: 1 },
+    statGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '12px', marginBottom: '20px' },
+    stat: ui.stat,
+    statLabel: ui.statLabel,
+    statValue: ui.statValue,
+    twoCol: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px' },
 };

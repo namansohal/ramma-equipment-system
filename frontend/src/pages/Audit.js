@@ -114,10 +114,10 @@ export default function Audit() {
 const styles = {
     filterRow: { display: 'flex', gap: '8px', marginBottom: '18px', flexWrap: 'wrap' },
     filterBtn: { padding: '7px 14px', backgroundColor: '#fff', color: ui.colors.inkSoft, border: `0.5px solid ${ui.colors.borderStrong}`, borderRadius: '7px', cursor: 'pointer', fontSize: '12px', fontWeight: '500' },
-    filterActive: { padding: '7px 14px', backgroundColor: ui.colors.accentSoft, color: ui.colors.accent, border: `0.5px solid ${ui.colors.accent}`, borderRadius: '7px', cursor: 'pointer', fontSize: '12px', fontWeight: '500' },
+    filterActive: { padding: '7px 14px', backgroundColor: ui.colors.ink, color: '#fff', border: `1px solid ${ui.colors.ink}`, borderRadius: '7px', cursor: 'pointer', fontSize: '12px', fontWeight: '500' },
     badgeDel: { fontSize: '11px', fontWeight: '600', color: ui.colors.accent, backgroundColor: ui.colors.accentSoft, padding: '2px 8px', borderRadius: '20px' },
     badgeNew: { fontSize: '11px', fontWeight: '600', color: '#15803d', backgroundColor: '#f0fdf4', padding: '2px 8px', borderRadius: '20px' },
     badgeEdit: { fontSize: '11px', fontWeight: '600', color: '#b45309', backgroundColor: '#fffbeb', padding: '2px 8px', borderRadius: '20px' },
     badgeRestore: { fontSize: '11px', fontWeight: '600', color: '#1e40af', backgroundColor: '#eff6ff', padding: '2px 8px', borderRadius: '20px' },
-    restoreBtn: { padding: '5px 12px', backgroundColor: ui.colors.accent, color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: '500' },
+    restoreBtn: { padding: '5px 12px', backgroundColor: ui.colors.ink, color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: '500' },
 };

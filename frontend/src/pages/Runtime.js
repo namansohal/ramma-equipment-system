@@ -394,7 +394,7 @@ export default function Runtime() {
 const styles = {
     chipRow: { display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '4px' },
     chip: { padding: '8px 16px', border: `0.5px solid ${ui.colors.borderStrong}`, borderRadius: '8px', cursor: 'pointer', backgroundColor: '#fff', userSelect: 'none', fontSize: '13px', color: ui.colors.ink },
-    chipActive: { padding: '8px 16px', border: `0.5px solid ${ui.colors.accent}`, borderRadius: '8px', cursor: 'pointer', backgroundColor: ui.colors.accentSoft, color: ui.colors.accent, userSelect: 'none', fontSize: '13px', fontWeight: '500' },
+    chipActive: { padding: '8px 16px', border: `1px solid ${ui.colors.ink}`, borderRadius: '8px', cursor: 'pointer', backgroundColor: ui.colors.ink, color: '#fff', userSelect: 'none', fontSize: '13px', fontWeight: '500' },
     hoursHint: { fontSize: '13px', color: ui.colors.ink, fontWeight: '500', marginBottom: '14px', marginTop: '-6px' },
     headRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' },
     filterWrap: { display: 'flex', alignItems: 'center', gap: '8px' },
