@@ -109,6 +109,17 @@ def mainbook_report(
 
 # ---------- Excel export ----------
 
+_FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
+
+
+def _excel_safe(value):
+    """User-entered text starting with a formula character would become a live
+    formula in the exported sheet. Prefix it with a quote so it stays text."""
+    if isinstance(value, str) and value.startswith(_FORMULA_PREFIXES):
+        return "'" + value
+    return value
+
+
 def make_excel(title, headers, data_rows):
     wb = Workbook()
     ws = wb.active
@@ -129,7 +140,7 @@ def make_excel(title, headers, data_rows):
         cell.alignment = Alignment(horizontal="left")
 
     for row in data_rows:
-        ws.append(row)
+        ws.append([_excel_safe(v) for v in row])
 
     for col in ws.columns:
         max_len = max((len(str(c.value)) for c in col if c.value), default=10)

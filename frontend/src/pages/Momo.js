@@ -303,7 +303,7 @@ export default function Momo() {
                 <div style={styles.headRow}>
                     <div style={ui.cardTitle}>MOMO Ledger</div>
                     <div style={styles.filterWrap}>
-                        {selected.size > 0 && !viewer && (
+                        {selected.size > 0 && admin && (
                             confirmBulk ? (
                                 <span style={styles.wrap}>
                                     <span style={styles.bulkText}>Delete {selected.size} selected?</span>
@@ -313,7 +313,7 @@ export default function Momo() {
                             ) : (
                                 <span style={styles.wrap}>
                                     <span style={styles.bulkText}>{selected.size} selected</span>
-                                    <button onClick={() => setConfirmBulk(true)} style={styles.bulkDelBtn}>Delete Selected</button>
+                                    {admin && <button onClick={() => setConfirmBulk(true)} style={styles.bulkDelBtn}>Delete Selected</button>}
                                     <button onClick={clearSelection} style={styles.no}>Clear</button>
                                 </span>
                             )
@@ -339,7 +339,7 @@ export default function Momo() {
                         {records.map(r => (
                             <tr key={r.momo_id} style={ui.tr}>
                                 <td style={ui.td}>
-                                    {!viewer && <input type="checkbox" checked={selected.has(r.momo_id)} onChange={() => toggleSelect(r.momo_id)} />}
+                                    {admin && <input type="checkbox" checked={selected.has(r.momo_id)} onChange={() => toggleSelect(r.momo_id)} />}
                                 </td>
                                 {editing === r.momo_id ? (
                                     <>

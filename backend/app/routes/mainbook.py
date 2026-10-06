@@ -325,7 +325,7 @@ def edit_transaction(
 def bulk_delete_transactions(
     data: BulkDelete,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_editor)
+    current_user: User = Depends(require_admin)
 ):
     if not data.ids:
         raise HTTPException(status_code=400, detail="No entries selected")

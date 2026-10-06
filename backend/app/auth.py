@@ -7,13 +7,23 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.users import User
 import os
+import hmac
+import logging
+import hashlib
 from dotenv import load_dotenv
 
 load_dotenv()
 
 SECRET_KEY = os.getenv("SECRET_KEY")
-ALGORITHM  = os.getenv("ALGORITHM")
-ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES"))
+ALGORITHM  = os.getenv("ALGORITHM", "HS256")
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "480"))
+
+if not SECRET_KEY:
+    raise RuntimeError("SECRET_KEY environment variable is not set")
+if len(SECRET_KEY) < 32:
+    logging.getLogger(__name__).warning("SECRET_KEY is shorter than 32 characters; use a long random value")
+if ALGORITHM not in ("HS256", "HS384", "HS512"):
+    raise RuntimeError("ALGORITHM must be HS256, HS384 or HS512")
 
 pwd_context   = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
@@ -24,11 +34,23 @@ def verify_password(plain, hashed):
 def hash_password(password):
     return pwd_context.hash(password)
 
+def password_fingerprint(password_hash: str) -> str:
+    """Short keyed digest of the stored hash. Changes whenever the password
+    changes, so tokens issued before a password change stop working."""
+    return hmac.new(SECRET_KEY.encode(), password_hash.encode(), hashlib.sha256).hexdigest()[:16]
+
 def create_access_token(data: dict):
     to_encode = data.copy()
     expire    = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
+def issue_token(user: User) -> str:
+    return create_access_token(data={
+        "sub":  str(user.user_id),
+        "role": user.role.name,
+        "pwf":  password_fingerprint(user.password_hash),
+    })
 
 def get_current_user(
     token: str = Depends(oauth2_scheme),
@@ -40,15 +62,20 @@ def get_current_user(
         headers     = {"WWW-Authenticate": "Bearer"},
     )
     try:
-        payload  = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        username = payload.get("sub")
-        if username is None:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id = int(payload.get("sub"))
+        fingerprint = payload.get("pwf")
+        if not fingerprint:
             raise credentials_exception
-    except JWTError:
+    except (JWTError, TypeError, ValueError):
         raise credentials_exception
 
-    user = db.query(User).filter(User.username == username).first()
+    # Look up by user_id, never by username: usernames can be changed and reused,
+    # which would let an old token resolve to a different person.
+    user = db.query(User).filter(User.user_id == user_id).first()
     if user is None or not user.active:
+        raise credentials_exception
+    if not hmac.compare_digest(fingerprint, password_fingerprint(user.password_hash)):
         raise credentials_exception
     return user
 

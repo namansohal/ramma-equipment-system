@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import Optional
 from datetime import datetime
@@ -8,6 +8,8 @@ from app.models.users import User
 from app.models.expenses import Expense
 from app.models.mainbook import MainbookTransaction
 from app.models.stock import StockTransaction
+from app.models.momo import MomoTransaction
+from app.routes.momo import _recompute_balances as _recompute_momo_balances
 from app.auth import get_current_user
 from app.permissions import require_admin
 
@@ -16,7 +18,7 @@ router = APIRouter(prefix="/audit", tags=["Audit"])
 
 @router.get("/")
 def list_audit(
-    limit: int = 200,
+    limit: int = Query(200, ge=1, le=1000),
     table: Optional[str] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin)
@@ -59,6 +61,7 @@ def restore_record(
         "expenses": Expense,
         "mainbook_transactions": MainbookTransaction,
         "stock_transactions": StockTransaction,
+        "momo_transactions": MomoTransaction,
     }
     Model = model_map.get(table)
     if not Model:
@@ -68,6 +71,7 @@ def restore_record(
         "expenses": "expense_id",
         "mainbook_transactions": "transaction_id",
         "stock_transactions": "stock_txn_id",
+        "momo_transactions": "momo_id",
     }
     pk = pk_map[table]
 
@@ -79,6 +83,8 @@ def restore_record(
 
     record.deleted_at = None
     record.deleted_by = None
+    if table == "momo_transactions":
+        _recompute_momo_balances(db, record.location_id)
 
     db.add(AuditLog(
         table_name=table,

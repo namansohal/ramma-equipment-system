@@ -24,7 +24,9 @@ export default function ChangePassword() {
         }
         setLoading(true);
         try {
-            await changePassword({ old_password: form.old_password, new_password: form.new_password });
+            const res = await changePassword({ old_password: form.old_password, new_password: form.new_password });
+            // Old tokens stop working once the password changes; keep this session signed in.
+            if (res.data?.access_token) localStorage.setItem('token', res.data.access_token);
             setSuccess('Password changed successfully');
             setForm({ old_password: '', new_password: '', confirm: '' });
         } catch (err) {
