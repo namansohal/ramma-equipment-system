@@ -6,6 +6,8 @@ from pydantic import BaseModel
 from app.database import get_db
 from app.models.expenses import Expense, ExpenseMachineLink, ExpenseType
 from app.models.locations import Location
+from app.models.machines import Machine
+from app.models.loans import Loan, LoanRepayment
 from app.models.links import ExpenseStockLink, MainbookExpenseLink
 from app.models.audit import AuditLog
 from app.schemas.expenses import ExpenseCreate, ExpenseEdit, ExpenseResponse
@@ -50,6 +52,19 @@ def create_expense(
     if not expense_type:
         raise HTTPException(status_code=404, detail="Expense type not found")
 
+    debit, credit = float(data.debit or 0), float(data.credit or 0)
+    if debit < 0 or credit < 0:
+        raise HTTPException(status_code=400, detail="Amounts cannot be negative")
+    if debit == 0 and credit == 0 and not data.is_carry_forward:
+        raise HTTPException(status_code=400, detail="Enter an amount")
+
+    machine_ids = list(dict.fromkeys(data.machine_ids or []))
+    if machine_ids:
+        known = {m for (m,) in db.query(Machine.machine_id).filter(Machine.machine_id.in_(machine_ids)).all()}
+        unknown = [m for m in machine_ids if m not in known]
+        if unknown:
+            raise HTTPException(status_code=400, detail=f"Unknown machine id(s): {', '.join(map(str, unknown))}")
+
     if expense_type.code == "loan":
         if not data.staff_id:
             raise HTTPException(status_code=400, detail="Select which staff member this loan is for")
@@ -62,7 +77,7 @@ def create_expense(
         expense = db.query(Expense).filter(Expense.expense_id == loan.expense_id).first()
         return expense
 
-    is_common = len(data.machine_ids) == 0
+    is_common = len(machine_ids) == 0
 
     expense = Expense(
         location_id=location.location_id,
@@ -79,7 +94,7 @@ def create_expense(
     db.add(expense)
     db.flush()
 
-    for machine_id in data.machine_ids:
+    for machine_id in machine_ids:
         db.add(ExpenseMachineLink(expense_id=expense.expense_id, machine_id=machine_id))
 
     _recompute_expense_balances(db, location.location_id)
@@ -103,7 +118,7 @@ def get_expenses(
     from_date: date = None,
     to_date: date = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_editor)
 ):
     limit = min(limit, 500)
 
@@ -137,11 +152,19 @@ def bulk_change_date(
         raise HTTPException(status_code=400, detail="No entries selected")
 
     changed = 0
+    skipped = 0
     location_ids = set()
 
     for expense_id in data.ids:
         expense = db.query(Expense).filter(Expense.expense_id == expense_id, Expense.deleted_at == None).first()
         if not expense:
+            continue
+        # Linked entries would drift from their purchase / Mainbook entry / loan.
+        if (db.query(ExpenseStockLink).filter(ExpenseStockLink.expense_id == expense_id).first()
+                or db.query(MainbookExpenseLink).filter(MainbookExpenseLink.expense_id == expense_id).first()
+                or db.query(Loan).filter(Loan.expense_id == expense_id).first()
+                or db.query(LoanRepayment).filter(LoanRepayment.expense_id == expense_id).first()):
+            skipped += 1
             continue
         old_date = expense.txn_date
         expense.txn_date = data.new_date
@@ -160,7 +183,10 @@ def bulk_change_date(
         _recompute_expense_balances(db, loc_id)
 
     db.commit()
-    return {"message": f"{changed} entry(ies) moved to {data.new_date}"}
+    msg = f"{changed} entry(ies) moved to {data.new_date}"
+    if skipped:
+        msg += f"; {skipped} skipped because they belong to a purchase, Mainbook entry or loan — change those there"
+    return {"message": msg}
 
 
 @router.patch("/{expense_id}")
@@ -300,7 +326,7 @@ def delete_expense(
 @router.get("/types")
 def get_expense_types(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_editor)
 ):
     types = db.query(ExpenseType).all()
     return [{"type_id": t.type_id, "code": t.code, "label": t.label} for t in types]

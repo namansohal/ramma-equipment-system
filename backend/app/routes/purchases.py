@@ -33,7 +33,7 @@ class PurchaseCreate(BaseModel):
 def purchase_history(
     part_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_editor)
 ):
     """Past purchases of this part, for price comparison before buying."""
     txns = db.query(StockTransaction).filter(
@@ -142,7 +142,8 @@ def purchase_spare_part(
 
         recipients = set()
         recipients.add(current_user.user_id)
-        managers_and_owner = db.query(User).join(User.role).filter(
+        managers_and_owner = db.query(User).filter(
+            User.active == True,
             User.role.has(name="owner") | User.role.has(name="manager")
         ).all()
         for u in managers_and_owner:

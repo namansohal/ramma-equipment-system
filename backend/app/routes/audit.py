@@ -10,7 +10,10 @@ from app.models.mainbook import MainbookTransaction
 from app.models.stock import StockTransaction
 from app.models.momo import MomoTransaction
 from app.models.customers import CustomerPayment
-from app.models.links import MainbookExpenseLink, ExpenseStockLink
+from app.models.runtime import MachineRuntime
+from app.models.downtime import MachineDowntime
+from app.models.staff import Staff
+from app.models.links import MainbookExpenseLink, ExpenseStockLink, MainbookMomoLink
 from app.expense_links import restore_blocked_reason, restore_linked
 from app.stock_costs import available, record_part_cost
 from app.models.machine_income import MachineIncome
@@ -57,6 +60,13 @@ def list_audit(
 def _restore_mainbook_side_effects(db: Session, txn: MainbookTransaction, user_id: int):
     """Undo what deleting a mainbook entry also did: the linked expense was
     soft-deleted and its machine income rows were removed (and logged)."""
+    mlink = db.query(MainbookMomoLink).filter(MainbookMomoLink.transaction_id == txn.transaction_id).first()
+    m = mlink and db.query(MomoTransaction).filter(MomoTransaction.momo_id == mlink.momo_id).first()
+    if m and m.deleted_at is not None:
+        m.deleted_at, m.deleted_by = None, None
+        db.add(AuditLog(table_name="momo_transactions", record_id=m.momo_id, action="RESTORE",
+                        new_value=f"restored with mainbook entry {txn.transaction_id}", changed_by=user_id))
+        _recompute_momo_balances(db, m.location_id)
     link = db.query(MainbookExpenseLink).filter(MainbookExpenseLink.transaction_id == txn.transaction_id).first()
     if link:
         exp = db.query(Expense).filter(Expense.expense_id == link.expense_id).first()
@@ -112,6 +122,9 @@ def restore_record(
         "stock_transactions": StockTransaction,
         "momo_transactions": MomoTransaction,
         "customer_payments": CustomerPayment,
+        "machine_runtime": MachineRuntime,
+        "machine_downtime": MachineDowntime,
+        "staff": Staff,
     }
     Model = model_map.get(table)
     if not Model:
@@ -123,6 +136,9 @@ def restore_record(
         "stock_transactions": "stock_txn_id",
         "momo_transactions": "momo_id",
         "customer_payments": "payment_id",
+        "machine_runtime": "runtime_id",
+        "machine_downtime": "downtime_id",
+        "staff": "staff_id",
     }
     pk = pk_map[table]
 
@@ -136,6 +152,16 @@ def restore_record(
         reason = restore_blocked_reason(db, record)
         if reason:
             raise HTTPException(status_code=400, detail=reason)
+    if table == "momo_transactions":
+        link = db.query(MainbookMomoLink).filter(MainbookMomoLink.momo_id == record.momo_id).first()
+        mb = link and db.query(MainbookTransaction).filter(MainbookTransaction.transaction_id == link.transaction_id).first()
+        if mb and mb.deleted_at is not None:
+            raise HTTPException(status_code=400, detail="This MOMO entry belongs to a deleted Mainbook entry. Restore the Mainbook entry instead; that restores both.")
+    if table == "machine_downtime" and record.end_date is None:
+        if db.query(MachineDowntime).filter(
+                MachineDowntime.machine_id == record.machine_id, MachineDowntime.end_date == None,
+                MachineDowntime.deleted_at == None).first():
+            raise HTTPException(status_code=400, detail="This machine already has an ongoing downtime record. Resolve it first.")
     if table == "stock_transactions" and record.direction == "OUT":
         have = available(db, record.part_id)
         if have < float(record.quantity):
@@ -143,6 +169,8 @@ def restore_record(
 
     record.deleted_at = None
     record.deleted_by = None
+    if table == "staff":
+        record.active = True
     # Running balances are stored per row, so they must be rebuilt after a restore.
     if table == "momo_transactions":
         _recompute_momo_balances(db, record.location_id)

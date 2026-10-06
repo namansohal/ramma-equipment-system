@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
-import { getMachines, getDowntime } from '../services/api';
+import { getMachines, getDowntime, isViewer } from '../services/api';
 import * as ui from '../components/ui';
 
 const { colors } = ui;
@@ -10,6 +10,8 @@ export default function Machines() {
     const navigate = useNavigate();
     const [machines, setMachines] = useState([]);
     const [down, setDown] = useState({});
+    // Machine detail shows money, which viewers can't see.
+    const viewer = isViewer();
 
     useEffect(() => {
         getMachines().then(res => setMachines(res.data)).catch(e => console.error(e));
@@ -24,7 +26,7 @@ export default function Machines() {
     return (
         <Layout>
             <div style={styles.intro}>
-                <span>Select a machine to view its full history — parts used, expenses, and activity.</span>
+                <span>{viewer ? 'Machine status at a glance.' : 'Select a machine to view its full history — parts used, expenses, and activity.'}</span>
                 <span style={styles.legend}>
                     <span style={styles.legendItem}><span style={{ ...styles.dot, backgroundColor: '#15803D' }} />Available</span>
                     <span style={styles.legendItem}><span style={{ ...styles.dot, backgroundColor: colors.accent }} />Down</span>
@@ -38,7 +40,8 @@ export default function Machines() {
                             type="button"
                             key={m.machine_id}
                             style={{ ...styles.tile, borderTopColor: isDown ? colors.accent : '#15803D' }}
-                            onClick={() => navigate(`/machines/${m.machine_id}`)}
+                            onClick={viewer ? undefined : () => navigate(`/machines/${m.machine_id}`)}
+                            disabled={viewer}
                         >
                             <span style={styles.code}>{m.code}</span>
                             <span style={styles.label}>Excavator</span>

@@ -7,7 +7,8 @@ from app.database import get_db
 from app.models.mainbook import MainbookTransaction
 from app.models.expenses import Expense, ExpenseType
 from app.models.locations import Location
-from app.models.links import MainbookExpenseLink
+from app.models.links import MainbookExpenseLink, MainbookMomoLink
+from app.models.momo import MomoTransaction
 from app.models.machine_income import MachineIncome
 from app.models.audit import AuditLog
 from app.schemas.mainbook import MainbookResponse
@@ -90,6 +91,27 @@ def _delete_linked_expense(db: Session, transaction_id: int, deleted_by: int):
             _recompute_expense_balances(db, exp.location_id)
 
 
+def _recompute_momo(db: Session, location_id: int):
+    from app.routes.momo import _recompute_balances
+    _recompute_balances(db, location_id)
+
+
+def _linked_momo(db: Session, transaction_id: int):
+    link = db.query(MainbookMomoLink).filter(MainbookMomoLink.transaction_id == transaction_id).first()
+    return link and db.query(MomoTransaction).filter(MomoTransaction.momo_id == link.momo_id).first()
+
+
+def _delete_linked_momo(db: Session, transaction_id: int, deleted_by: int):
+    m = _linked_momo(db, transaction_id)
+    if m and m.deleted_at is None:
+        m.deleted_at = datetime.utcnow()
+        m.deleted_by = deleted_by
+        db.add(AuditLog(table_name="momo_transactions", record_id=m.momo_id, action="DELETE",
+                        old_value=f"auto-deleted: linked mainbook entry {transaction_id} was deleted",
+                        changed_by=deleted_by))
+        _recompute_momo(db, m.location_id)
+
+
 def _remove_machine_income(db: Session, transaction_id: int, deleted_by: int):
     """Machine income rows have no soft-delete column, so log each one before
     removing it; restoring the mainbook entry re-creates them from this log."""
@@ -116,6 +138,10 @@ def create_transaction(
 
     debit = float(data.debit or 0)
     credit = float(data.credit or 0)
+    if debit < 0 or credit < 0:
+        raise HTTPException(status_code=400, detail="Amounts cannot be negative")
+    if debit == 0 and credit == 0 and not data.is_carry_forward:
+        raise HTTPException(status_code=400, detail="Enter an amount")
 
     if debit > 0 and not data.destination:
         raise HTTPException(status_code=400, detail="Select where the money is going (Expense / Refund / MOMO)")
@@ -170,6 +196,23 @@ def create_transaction(
         # The expense's running balance depends on its date; rebuild the book.
         _recompute_expense_balances(db, location.location_id)
 
+    if debit > 0 and data.destination == "momo":
+        # Money sent to MOMO shows up there as money in, linked to this entry.
+        m = MomoTransaction(
+            location_id=location.location_id,
+            txn_date=data.txn_date,
+            description=f"From Mainbook: {clean_description}",
+            debit=0,
+            credit=debit,
+            balance=0,
+            is_carry_forward=False,
+            created_by=current_user.user_id,
+        )
+        db.add(m)
+        db.flush()
+        db.add(MainbookMomoLink(transaction_id=txn.transaction_id, momo_id=m.momo_id))
+        _recompute_momo(db, location.location_id)
+
     if credit > 0 and data.machine_id:
         db.add(MachineIncome(
             machine_id=data.machine_id,
@@ -200,7 +243,7 @@ def list_transactions(
     from_date: date = None,
     to_date: date = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_editor)
 ):
     location = _current_location(db)
     if not location:
@@ -231,6 +274,7 @@ def bulk_change_date(
     changed = 0
     location_ids = set()
     expense_location_ids = set()
+    momo_location_ids = set()
 
     for transaction_id in data.ids:
         txn = db.query(MainbookTransaction).filter(
@@ -252,6 +296,11 @@ def bulk_change_date(
                 exp.txn_date = data.new_date
                 expense_location_ids.add(exp.location_id)
 
+        m = _linked_momo(db, transaction_id)
+        if m and m.deleted_at is None:
+            m.txn_date = data.new_date
+            momo_location_ids.add(m.location_id)
+
         # Move linked machine income date too
         db.query(MachineIncome).filter(MachineIncome.transaction_id == transaction_id).update({"txn_date": data.new_date})
 
@@ -267,6 +316,8 @@ def bulk_change_date(
         _recompute_mainbook_balances(db, loc_id)
     for loc_id in expense_location_ids:
         _recompute_expense_balances(db, loc_id)
+    for loc_id in momo_location_ids:
+        _recompute_momo(db, loc_id)
 
     db.commit()
     return {"message": f"{changed} entry(ies) moved to {data.new_date}"}
@@ -288,10 +339,11 @@ def edit_transaction(
 
     is_expense_linked = db.query(MainbookExpenseLink).filter(MainbookExpenseLink.transaction_id == transaction_id).first()
     is_income_linked = db.query(MachineIncome).filter(MachineIncome.transaction_id == transaction_id).first()
-    if is_expense_linked or is_income_linked:
+    is_momo_linked = db.query(MainbookMomoLink).filter(MainbookMomoLink.transaction_id == transaction_id).first()
+    if is_expense_linked or is_income_linked or is_momo_linked:
         raise HTTPException(
             status_code=400,
-            detail="This entry is linked to the Expense book or a machine's income and cannot be edited directly. Delete and re-enter instead."
+            detail="This entry is linked to the Expense book, MOMO or a machine's income and cannot be edited directly. Delete and re-enter instead."
         )
 
     changes = []
@@ -307,6 +359,8 @@ def edit_transaction(
             txn.description = new_desc
 
     if data.amount is not None:
+        if float(data.amount) < 0:
+            raise HTTPException(status_code=400, detail="Amount cannot be negative")
         was_debit = float(txn.debit or 0) > 0
         old_amount = float(txn.debit) if was_debit else float(txn.credit)
         if float(data.amount) != old_amount:
@@ -359,6 +413,7 @@ def bulk_delete_transactions(
 
         _remove_machine_income(db, transaction_id, current_user.user_id)
         _delete_linked_expense(db, transaction_id, current_user.user_id)
+        _delete_linked_momo(db, transaction_id, current_user.user_id)
 
         db.add(AuditLog(
             table_name="mainbook_transactions",
@@ -393,6 +448,7 @@ def delete_transaction(
 
     _remove_machine_income(db, transaction_id, current_user.user_id)
     _delete_linked_expense(db, transaction_id, current_user.user_id)
+    _delete_linked_momo(db, transaction_id, current_user.user_id)
 
     _recompute_mainbook_balances(db, txn.location_id)
 

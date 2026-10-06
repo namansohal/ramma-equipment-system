@@ -12,6 +12,13 @@ from app.models.users import User
 from app.permissions import require_editor, require_admin
 from app.text_utils import smart_capitalize, strip_tags
 from app.ledger import latest_window
+from app.models.links import MainbookMomoLink
+
+LINKED_MSG = "This entry came from a Mainbook transfer. Edit or delete the Mainbook entry instead; that updates both."
+
+
+def _is_linked(db: Session, momo_id: int) -> bool:
+    return db.query(MainbookMomoLink).filter(MainbookMomoLink.momo_id == momo_id).first() is not None
 
 router = APIRouter(prefix="/momo", tags=["MOMO"])
 
@@ -105,7 +112,7 @@ def list_momo(
     from_date: date = None,
     to_date: date = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_editor)
 ):
     location = _current_location(db)
     if not location:
@@ -145,6 +152,8 @@ def edit_momo(
     txn = db.query(MomoTransaction).filter(MomoTransaction.momo_id == momo_id, MomoTransaction.deleted_at == None).first()
     if not txn:
         raise HTTPException(status_code=404, detail="MOMO entry not found")
+    if _is_linked(db, txn.momo_id):
+        raise HTTPException(status_code=400, detail=LINKED_MSG)
 
     changes = []
 
@@ -195,12 +204,16 @@ def bulk_delete_momo(
     if not data.ids:
         raise HTTPException(status_code=400, detail="No entries selected")
 
+    skipped = 0
     deleted_count = 0
     location_ids = set()
 
     for momo_id in data.ids:
         txn = db.query(MomoTransaction).filter(MomoTransaction.momo_id == momo_id, MomoTransaction.deleted_at == None).first()
         if not txn:
+            continue
+        if _is_linked(db, txn.momo_id):
+            skipped += 1
             continue
         txn.deleted_at = datetime.utcnow()
         txn.deleted_by = current_user.user_id
@@ -219,7 +232,10 @@ def bulk_delete_momo(
         _recompute_balances(db, loc_id)
 
     db.commit()
-    return {"message": f"{deleted_count} entry(ies) deleted"}
+    msg = f"{deleted_count} entry(ies) deleted"
+    if skipped:
+        msg += f"; {skipped} skipped because they came from Mainbook transfers — delete those in the Mainbook"
+    return {"message": msg}
 
 
 @router.delete("/{momo_id}")
@@ -231,6 +247,8 @@ def delete_momo(
     txn = db.query(MomoTransaction).filter(MomoTransaction.momo_id == momo_id, MomoTransaction.deleted_at == None).first()
     if not txn:
         raise HTTPException(status_code=404, detail="MOMO entry not found")
+    if _is_linked(db, txn.momo_id):
+        raise HTTPException(status_code=400, detail=LINKED_MSG)
 
     txn.deleted_at = datetime.utcnow()
     txn.deleted_by = current_user.user_id

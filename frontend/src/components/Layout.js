@@ -8,15 +8,15 @@ const NAV_GROUPS = [
         name: 'Daily work',
         items: [
             { path: '/dashboard', label: 'Dashboard', icon: 'dashboard' },
-            { path: '/mainbook', label: 'Mainbook', icon: 'book' },
-            { path: '/expenses', label: 'Expenses', icon: 'receipt' },
-            { path: '/momo', label: 'MOMO', icon: 'phone' },
+            { path: '/mainbook', label: 'Mainbook', icon: 'book' , noViewer: true },
+            { path: '/expenses', label: 'Expenses', icon: 'receipt' , noViewer: true },
+            { path: '/momo', label: 'MOMO', icon: 'phone' , noViewer: true },
         ],
     },
     {
         name: 'Machines',
         items: [
-            { path: '/runtime', label: 'Runtime', icon: 'clock' },
+            { path: '/runtime', label: 'Runtime', icon: 'clock' , noViewer: true },
             { path: '/downtime', label: 'Downtime', icon: 'warn' },
             { path: '/stock', label: 'Spare Parts', icon: 'gear' },
             { path: '/machines', label: 'Machines', icon: 'truck' },
@@ -27,8 +27,8 @@ const NAV_GROUPS = [
         name: 'People & money',
         items: [
             { path: '/customers', label: 'Customers', icon: 'people', adminOnly: true },
-            { path: '/loans', label: 'Loans', icon: 'coins' },
-            { path: '/reports', label: 'Reports', icon: 'chart' },
+            { path: '/loans', label: 'Loans', icon: 'coins' , noViewer: true },
+            { path: '/reports', label: 'Reports', icon: 'chart' , noViewer: true },
         ],
     },
     {
@@ -49,6 +49,7 @@ export default function Layout({ children }) {
     const location = useLocation();
     const user = JSON.parse(localStorage.getItem('user') || '{}');
     const isAdmin = user.role === 'owner' || user.role === 'manager';
+    const isViewer = user.role === 'viewer';
     const [unread, setUnread] = useState(0);
 
     useEffect(() => {
@@ -62,7 +63,8 @@ export default function Layout({ children }) {
 
     const groups = NAV_GROUPS
         .filter(g => !g.adminOnly || isAdmin)
-        .map(g => ({ ...g, items: g.items.filter(i => !i.adminOnly || isAdmin) }));
+        .map(g => ({ ...g, items: g.items.filter(i => (!i.adminOnly || isAdmin) && !(i.noViewer && isViewer)) }))
+        .filter(g => g.items.length > 0);
 
     // Detail pages (/machines/:id, /customers/:key) highlight their list page.
     const isActive = (path) => location.pathname === path ||

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import Layout from '../components/Layout';
 import PartPicker from '../components/PartPicker';
 import ChipSelect from '../components/ChipSelect';
-import { getParts, getCurrentStock, getStockHistory, createStockTxn, deleteStockTxn, purchaseSparePart, getPurchaseHistory, getMachines, extractReceipt, isViewer } from '../services/api';
+import { getParts, getCurrentStock, getStockHistory, createStockTxn, deleteStockTxn, purchaseSparePart, getPurchaseHistory, getMachines, extractReceipt, isViewer, isAdmin, setPartMinLevel } from '../services/api';
 import { getErrorMessage } from '../utils/errors';
 import * as ui from '../components/ui';
 
@@ -11,6 +11,9 @@ export default function Stock() {
     const [parts, setParts] = useState([]);
     const [machines, setMachines] = useState([]);
     const [stock, setStock] = useState([]);
+    const admin = isAdmin();
+    const [stockFilter, setStockFilter] = useState('stocked');
+    const [minEdit, setMinEdit] = useState(null); // { part_id, value }
     const [history, setHistory] = useState([]);
     const [mode, setMode] = useState('issue');
     const [loading, setLoading] = useState(false);
@@ -38,6 +41,18 @@ export default function Stock() {
 
     const loadParts = async () => { try { const r = await getParts(); setParts(r.data); } catch (e) { console.error(e); } };
     const loadMachines = async () => { try { const r = await getMachines(); setMachines(r.data); } catch (e) { console.error(e); } };
+    const saveMin = async (part) => {
+        setError(''); setSuccess('');
+        const v = String(minEdit.value).trim();
+        try {
+            const res = await setPartMinLevel(part.part_id, v === '' ? null : parseFloat(v));
+            setSuccess(res.data.message);
+            setMinEdit(null);
+            loadStock();
+        } catch (err) {
+            setError(getErrorMessage(err, 'Failed to set minimum'));
+        }
+    };
     const loadStock = async () => { try { const r = await getCurrentStock(); setStock(r.data); } catch (e) { console.error(e); } };
     const loadHistory = async () => { try { const r = await getStockHistory(); setHistory(r.data); } catch (e) { console.error(e); } };
 
@@ -365,25 +380,52 @@ export default function Stock() {
             )}
 
             <div style={ui.card}>
-                <div style={ui.cardTitle}>Current Stock</div>
+                <div style={styles.stockHead}>
+                    <div style={{ ...ui.cardTitle, marginBottom: 0 }}>Current Stock</div>
+                    <div style={styles.wrap} role="group" aria-label="Which parts to show">
+                        {[['stocked', 'Stocked'], ['low', `Low (${stock.filter(s => s.low).length})`], ['all', 'All parts']].map(([k, l]) => (
+                            <button key={k} type="button" onClick={() => setStockFilter(k)} style={stockFilter === k ? styles.tabActive : styles.tab}>{l}</button>
+                        ))}
+                    </div>
+                </div>
+                <div style={{ overflowX: 'auto' }}>
                 <table style={ui.table}>
-                    <thead><tr><th style={ui.th}>Part</th><th style={ui.th}>Available</th></tr></thead>
+                    <thead><tr><th style={ui.th}>Part</th><th style={ui.th}>Available</th><th style={ui.th}>Minimum</th></tr></thead>
                     <tbody>
-                        {stock.map(s => {
+                        {stock.filter(s => stockFilter === 'all' || (stockFilter === 'low' ? s.low : (s.ever_stocked || s.min_level != null))).map(s => {
                             const qty = parseFloat(s.available);
-                            const low = qty <= 5;
+                            const editing = minEdit && minEdit.part_id === s.part_id;
                             return (
                                 <tr key={s.part_id} style={ui.tr}>
                                     <td style={ui.td}>{s.name}</td>
-                                    <td style={ui.td}><span style={low ? styles.lowBadge : styles.okText}>{qty.toLocaleString()}</span></td>
+                                    <td style={ui.td}><span style={s.low ? styles.lowBadge : styles.okText}>{qty.toLocaleString()}</span></td>
+                                    <td style={ui.td}>
+                                        {editing ? (
+                                            <span style={styles.wrap}>
+                                                <input type="number" min="0" step="1" autoFocus aria-label={`Minimum for ${s.name}`}
+                                                    value={minEdit.value} onChange={e => setMinEdit(m => ({ ...m, value: e.target.value }))}
+                                                    style={{ ...ui.input, width: '90px', minHeight: '34px', padding: '4px 8px' }} />
+                                                <button type="button" style={styles.saveMin} onClick={() => saveMin(s)}>Save</button>
+                                                <button type="button" style={styles.no} onClick={() => setMinEdit(null)}>Cancel</button>
+                                            </span>
+                                        ) : (
+                                            <span style={styles.wrap}>
+                                                <span style={{ color: s.min_level == null ? ui.colors.muted : ui.colors.ink }}>
+                                                    {s.min_level != null ? s.min_level.toLocaleString() : (s.ever_stocked ? 'default (5)' : '—')}
+                                                </span>
+                                                {admin && <button type="button" style={styles.no} onClick={() => setMinEdit({ part_id: s.part_id, value: s.min_level ?? '' })}>Set</button>}
+                                            </span>
+                                        )}
+                                    </td>
                                 </tr>
                             );
                         })}
                         {stock.length === 0 && (
-                            <tr><td colSpan="2" style={{ ...ui.td, textAlign: 'center', color: ui.colors.muted, padding: '24px' }}>No stock recorded yet</td></tr>
+                            <tr><td colSpan="3" style={{ ...ui.td, textAlign: 'center', color: ui.colors.muted, padding: '24px' }}>No parts yet</td></tr>
                         )}
                     </tbody>
                 </table>
+                </div>
             </div>
 
             <div style={ui.card}>
@@ -423,6 +465,7 @@ export default function Stock() {
 }
 
 const styles = {
+    stockHead: { display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '10px', marginBottom: '16px' },
     tabRow: { display: 'flex', gap: '8px', marginBottom: '18px' },
     tab: { padding: '9px 16px', backgroundColor: '#fff', color: ui.colors.inkSoft, border: `0.5px solid ${ui.colors.borderStrong}`, borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '500' },
     tabActive: { padding: '9px 16px', backgroundColor: ui.colors.ink, color: '#fff', border: `1px solid ${ui.colors.ink}`, borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '500' },
@@ -431,7 +474,8 @@ const styles = {
     lowBadge: { fontSize: '13px', fontWeight: '500', color: ui.colors.accent, backgroundColor: ui.colors.accentSoft, padding: '2px 10px', borderRadius: '20px' },
     okText: { fontSize: '14px', color: ui.colors.ink },
     del: { padding: '5px 12px', backgroundColor: '#fff', color: ui.colors.accent, border: `0.5px solid #f0c0c0`, borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: '500' },
-    wrap: { display: 'inline-flex', gap: '6px' },
+    wrap: { display: 'inline-flex', flexWrap: 'wrap', alignItems: 'center', gap: '6px' },
+    saveMin: { padding: '5px 12px', backgroundColor: ui.colors.ink, color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: '600' },
     yes: { padding: '5px 12px', backgroundColor: ui.colors.accent, color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: '500' },
     no: { padding: '5px 12px', backgroundColor: '#fff', color: ui.colors.inkSoft, border: `0.5px solid ${ui.colors.borderStrong}`, borderRadius: '6px', cursor: 'pointer', fontSize: '12px' },
     historyBox: { backgroundColor: '#f5f3f0', border: `0.5px solid ${ui.colors.border}`, borderRadius: '8px', padding: '14px', marginBottom: '16px' },

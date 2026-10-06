@@ -4,14 +4,16 @@ from sqlalchemy import func, case
 from datetime import datetime
 from app.database import get_db
 from app.models.stock import StockTransaction
-from app.models.spare_parts import SparePart
+from app.models.spare_parts import SparePart, PartSetting
 from app.models.machines import Machine
 from app.models.locations import Location
 from app.models.audit import AuditLog
 from app.schemas.stock import StockTransactionCreate, StockTransactionResponse
 from app.auth import get_current_user
 from app.models.users import User
-from app.permissions import require_editor
+from app.permissions import require_editor, require_admin
+from typing import Optional
+from pydantic import BaseModel
 from app.models.expenses import Expense
 from app.models.links import ExpenseStockLink
 from app.ledger import recompute_expense_balances
@@ -80,28 +82,72 @@ def create_stock_transaction(
     return txn
 
 
+DEFAULT_MIN_LEVEL = 5  # used when a part has no minimum set
+
+
+class MinLevel(BaseModel):
+    min_level: Optional[float] = None
+
+
 @router.get("/current")
 def get_current_stock(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    results = db.query(
+    """Every active part (and any inactive part still in stock), with its level and minimum."""
+    levels = dict(db.query(
         StockTransaction.part_id,
-        func.sum(
-            case(
-                (StockTransaction.direction == "IN", StockTransaction.quantity),
-                else_=-StockTransaction.quantity
-            )
-        ).label("available")
-    ).filter(
-        StockTransaction.deleted_at == None
-    ).group_by(StockTransaction.part_id).all()
+        func.sum(case(
+            (StockTransaction.direction == "IN", StockTransaction.quantity),
+            else_=-StockTransaction.quantity
+        ))
+    ).filter(StockTransaction.deleted_at == None).group_by(StockTransaction.part_id).all())
+    mins = {p.part_id: p.min_level for p in db.query(PartSetting).all()}
 
-    parts = {p.part_id: p.name for p in db.query(SparePart).all()}
-    return [
-        {"part_id": r.part_id, "name": parts.get(r.part_id), "available": r.available}
-        for r in results
-    ]
+    out = []
+    for p in db.query(SparePart).order_by(SparePart.name).all():
+        qty = float(levels.get(p.part_id) or 0)
+        if not p.active and qty == 0:
+            continue
+        min_set = mins.get(p.part_id)
+        ever = p.part_id in levels
+        # Low = at or under its minimum. A part never bought and with no minimum
+        # set isn't something you keep in stock, so it isn't "low".
+        if min_set is not None:
+            low = qty <= float(min_set)
+        else:
+            low = ever and qty <= DEFAULT_MIN_LEVEL
+        out.append({
+            "part_id": p.part_id, "name": p.name, "available": qty,
+            "min_level": float(min_set) if min_set is not None else None,
+            "low": low,
+            "ever_stocked": ever,
+        })
+    return out
+
+
+@router.put("/parts/{part_id}/min-level")
+def set_min_level(
+    part_id: int,
+    data: MinLevel,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin)
+):
+    part = db.query(SparePart).filter(SparePart.part_id == part_id).first()
+    if not part:
+        raise HTTPException(status_code=404, detail="Part not found")
+    if data.min_level is not None and data.min_level < 0:
+        raise HTTPException(status_code=400, detail="Minimum cannot be negative")
+    row = db.query(PartSetting).filter(PartSetting.part_id == part_id).first()
+    old = row.min_level if row else None
+    if row is None:
+        row = PartSetting(part_id=part_id)
+        db.add(row)
+    row.min_level = data.min_level
+    db.add(AuditLog(table_name="part_settings", record_id=part_id, action="UPDATE", field_name="min_level",
+                    old_value=str(old), new_value=str(data.min_level), changed_by=current_user.user_id))
+    db.commit()
+    return {"message": f"Minimum for {part.name} set to {data.min_level if data.min_level is not None else 'default'}"}
 
 
 @router.get("/history")
