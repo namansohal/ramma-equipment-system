@@ -15,6 +15,7 @@ from app.auth import get_current_user
 from app.models.users import User
 from app.permissions import require_editor, require_admin
 from app.text_utils import smart_capitalize
+from app.ledger import recompute_expense_balances, latest_window
 
 router = APIRouter(prefix="/mainbook", tags=["Mainbook"])
 
@@ -67,14 +68,8 @@ def _recompute_mainbook_balances(db: Session, location_id: int):
 
 
 def _recompute_expense_balances(db: Session, location_id: int):
-    rows = db.query(Expense).filter(
-        Expense.location_id == location_id,
-        Expense.deleted_at == None
-    ).order_by(Expense.expense_id).all()
-    balance = 0.0
-    for r in rows:
-        balance = balance + float(r.credit or 0) - float(r.debit or 0)
-        r.balance = balance
+    # Same ledger order as the Expenses page (by date), not entry order.
+    recompute_expense_balances(db, location_id)
 
 
 def _delete_linked_expense(db: Session, transaction_id: int, deleted_by: int):
@@ -93,6 +88,20 @@ def _delete_linked_expense(db: Session, transaction_id: int, deleted_by: int):
             ))
             db.flush()
             _recompute_expense_balances(db, exp.location_id)
+
+
+def _remove_machine_income(db: Session, transaction_id: int, deleted_by: int):
+    """Machine income rows have no soft-delete column, so log each one before
+    removing it; restoring the mainbook entry re-creates them from this log."""
+    for inc in db.query(MachineIncome).filter(MachineIncome.transaction_id == transaction_id).all():
+        db.add(AuditLog(
+            table_name="machine_income",
+            record_id=transaction_id,
+            action="DELETE",
+            old_value=f"machine_id={inc.machine_id} amount={inc.amount} txn_date={inc.txn_date}",
+            changed_by=deleted_by,
+        ))
+        db.delete(inc)
 
 
 @router.post("/", response_model=MainbookResponse)
@@ -205,7 +214,7 @@ def list_transactions(
         if to_date:
             rows = [r for r in rows if r.txn_date <= to_date]
 
-    return rows[skip: skip + limit]
+    return latest_window(rows, skip, limit)
 
 
 @router.patch("/bulk-date")
@@ -346,7 +355,7 @@ def bulk_delete_transactions(
         location_ids.add(txn.location_id)
         deleted_count += 1
 
-        db.query(MachineIncome).filter(MachineIncome.transaction_id == transaction_id).delete()
+        _remove_machine_income(db, transaction_id, current_user.user_id)
         _delete_linked_expense(db, transaction_id, current_user.user_id)
 
         db.add(AuditLog(
@@ -380,7 +389,7 @@ def delete_transaction(
     txn.deleted_at = datetime.utcnow()
     txn.deleted_by = current_user.user_id
 
-    db.query(MachineIncome).filter(MachineIncome.transaction_id == transaction_id).delete()
+    _remove_machine_income(db, transaction_id, current_user.user_id)
     _delete_linked_expense(db, transaction_id, current_user.user_id)
 
     _recompute_mainbook_balances(db, txn.location_id)

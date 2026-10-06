@@ -13,6 +13,7 @@ from app.auth import get_current_user
 from app.models.users import User
 from app.permissions import require_admin, require_editor
 from app.text_utils import smart_capitalize
+from app.ledger import ordered_expense_rows, recompute_expense_balances, latest_window
 
 router = APIRouter(prefix="/expenses", tags=["Expenses"])
 
@@ -27,21 +28,11 @@ class BulkDateChange(BaseModel):
 
 
 def _ordered_expense_rows(db: Session, location_id: int):
-    rows = db.query(Expense).filter(
-        Expense.location_id == location_id,
-        Expense.deleted_at == None
-    ).all()
-    rows.sort(key=lambda r: (r.txn_date, 0 if r.is_carry_forward else 1, r.expense_id))
-    return rows
+    return ordered_expense_rows(db, location_id)
 
 
 def _recompute_expense_balances(db: Session, location_id: int):
-    db.flush()
-    rows = _ordered_expense_rows(db, location_id)
-    balance = 0.0
-    for r in rows:
-        balance = balance + float(r.credit or 0) - float(r.debit or 0)
-        r.balance = balance
+    recompute_expense_balances(db, location_id)
 
 
 @router.post("/", response_model=ExpenseResponse)
@@ -132,7 +123,7 @@ def get_expenses(
     rows = query.all()
     rows.sort(key=lambda r: (r.txn_date, 0 if r.is_carry_forward else 1, r.expense_id))
 
-    return rows[skip: skip + limit]
+    return latest_window(rows, skip, limit)
 
 
 @router.patch("/bulk-date")

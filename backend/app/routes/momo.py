@@ -11,6 +11,7 @@ from app.auth import get_current_user
 from app.models.users import User
 from app.permissions import require_editor, require_admin
 from app.text_utils import smart_capitalize, strip_tags
+from app.ledger import latest_window
 
 router = APIRouter(prefix="/momo", tags=["MOMO"])
 
@@ -130,7 +131,7 @@ def list_momo(
             "balance": float(r.balance or 0),
             "is_carry_forward": r.is_carry_forward,
         }
-        for r in rows[skip: skip + limit]
+        for r in latest_window(rows, skip, limit)
     ]
 
 
