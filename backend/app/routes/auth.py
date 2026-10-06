@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.users import User
@@ -34,7 +35,8 @@ def login(
     # Prefer the active account: a deactivated employee's row may share the username.
     user = (
         db.query(User)
-        .filter(User.username == username)
+        # Case-insensitive: older accounts were saved with capitals (e.g. "Dheeraj").
+        .filter(func.lower(User.username) == username)
         .order_by(User.active.desc())
         .first()
     )
