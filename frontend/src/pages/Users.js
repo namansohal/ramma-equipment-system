@@ -223,6 +223,6 @@ const styles = {
     editLink: { marginLeft: '8px', padding: '2px 8px', backgroundColor: 'transparent', color: ui.colors.muted, border: `0.5px solid ${ui.colors.border}`, borderRadius: '5px', cursor: 'pointer', fontSize: '11px' },
     editWrap: { display: 'inline-flex', alignItems: 'center', gap: '6px' },
     editInput: { padding: '5px 8px', border: `0.5px solid ${ui.colors.borderStrong}`, borderRadius: '6px', fontSize: '13px' },
-    saveBtn: { padding: '5px 12px', backgroundColor: ui.colors.accent, color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: '500' },
+    saveBtn: { padding: '5px 12px', backgroundColor: ui.colors.ink, color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: '500' },
     cancelBtn: { padding: '5px 9px', backgroundColor: '#fff', color: ui.colors.inkSoft, border: `0.5px solid ${ui.colors.borderStrong}`, borderRadius: '6px', cursor: 'pointer', fontSize: '12px' },
 };

@@ -161,6 +161,6 @@ const styles = {
     doneBadge: { fontSize: '12px', fontWeight: '500', color: '#15803d', backgroundColor: '#f0fdf4', padding: '4px 10px', borderRadius: '20px' },
     endWrap: { display: 'inline-flex', alignItems: 'center', gap: '6px' },
     endInput: { padding: '5px 8px', border: `0.5px solid ${ui.colors.borderStrong}`, borderRadius: '6px', fontSize: '12px' },
-    resolveBtn: { padding: '5px 12px', backgroundColor: ui.colors.accent, color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: '500' },
+    resolveBtn: { padding: '5px 12px', backgroundColor: ui.colors.ink, color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: '500' },
     cancelBtn: { padding: '5px 9px', backgroundColor: '#fff', color: ui.colors.inkSoft, border: `0.5px solid ${ui.colors.borderStrong}`, borderRadius: '6px', cursor: 'pointer', fontSize: '12px' },
 };
