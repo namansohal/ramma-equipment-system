@@ -33,11 +33,21 @@ function isTokenExpired(token) {
     }
 }
 
-function PrivateRoute({ children }) {
+const ADMIN = ['owner', 'manager'];
+const NOT_VIEWER = ['owner', 'manager', 'employee', 'store_keeper'];
+
+// `roles`: who may open the page. Others go to the dashboard instead of
+// seeing an empty page full of "permission" errors. (The API enforces the
+// same rules; this is only so people land somewhere useful.)
+function PrivateRoute({ children, roles }) {
     const token = localStorage.getItem('token');
     if (!token || isTokenExpired(token)) {
         localStorage.clear();
         return <Navigate to="/login" />;
+    }
+    if (roles) {
+        const role = (JSON.parse(localStorage.getItem('user') || '{}')).role;
+        if (!roles.includes(role)) return <Navigate to="/dashboard" replace />;
     }
     return children;
 }
@@ -64,24 +74,24 @@ export default function App() {
             <Routes>
                 <Route path="/login" element={<Login />} />
                 <Route path="/dashboard" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
-                <Route path="/mainbook" element={<PrivateRoute><Mainbook /></PrivateRoute>} />
-                <Route path="/expenses" element={<PrivateRoute><Expenses /></PrivateRoute>} />
+                <Route path="/mainbook" element={<PrivateRoute roles={NOT_VIEWER}><Mainbook /></PrivateRoute>} />
+                <Route path="/expenses" element={<PrivateRoute roles={NOT_VIEWER}><Expenses /></PrivateRoute>} />
                 <Route path="/stock" element={<PrivateRoute><Stock /></PrivateRoute>} />
-                <Route path="/loans" element={<PrivateRoute><Loans /></PrivateRoute>} />
+                <Route path="/loans" element={<PrivateRoute roles={NOT_VIEWER}><Loans /></PrivateRoute>} />
                 <Route path="/machines" element={<PrivateRoute><Machines /></PrivateRoute>} />
-                <Route path="/machines/:id" element={<PrivateRoute><MachineDetail /></PrivateRoute>} />
+                <Route path="/machines/:id" element={<PrivateRoute roles={NOT_VIEWER}><MachineDetail /></PrivateRoute>} />
                 <Route path="/downtime" element={<PrivateRoute><Downtime /></PrivateRoute>} />
-                <Route path="/reports" element={<PrivateRoute><Reports /></PrivateRoute>} />
-                <Route path="/audit" element={<PrivateRoute><Audit /></PrivateRoute>} />
-                <Route path="/staff" element={<PrivateRoute><Staff /></PrivateRoute>} />
+                <Route path="/reports" element={<PrivateRoute roles={ADMIN}><Reports /></PrivateRoute>} />
+                <Route path="/audit" element={<PrivateRoute roles={ADMIN}><Audit /></PrivateRoute>} />
+                <Route path="/staff" element={<PrivateRoute roles={ADMIN}><Staff /></PrivateRoute>} />
                 <Route path="/alerts" element={<PrivateRoute><Alerts /></PrivateRoute>} />
-                <Route path="/machine-profit" element={<PrivateRoute><MachineProfit /></PrivateRoute>} />
-                <Route path="/customers" element={<PrivateRoute><Customers /></PrivateRoute>} />
-                <Route path="/customers/:key" element={<PrivateRoute><CustomerDetail /></PrivateRoute>} />
-                <Route path="/momo" element={<PrivateRoute><Momo /></PrivateRoute>} />
-                <Route path="/runtime" element={<PrivateRoute><Runtime /></PrivateRoute>} />
-                <Route path="/secret" element={<PrivateRoute><Secret /></PrivateRoute>} />
-                <Route path="/users" element={<PrivateRoute><Users /></PrivateRoute>} />
+                <Route path="/machine-profit" element={<PrivateRoute roles={ADMIN}><MachineProfit /></PrivateRoute>} />
+                <Route path="/customers" element={<PrivateRoute roles={ADMIN}><Customers /></PrivateRoute>} />
+                <Route path="/customers/:key" element={<PrivateRoute roles={ADMIN}><CustomerDetail /></PrivateRoute>} />
+                <Route path="/momo" element={<PrivateRoute roles={NOT_VIEWER}><Momo /></PrivateRoute>} />
+                <Route path="/runtime" element={<PrivateRoute roles={NOT_VIEWER}><Runtime /></PrivateRoute>} />
+                <Route path="/secret" element={<PrivateRoute roles={['owner']}><Secret /></PrivateRoute>} />
+                <Route path="/users" element={<PrivateRoute roles={ADMIN}><Users /></PrivateRoute>} />
                 <Route path="/account" element={<PrivateRoute><Account /></PrivateRoute>} />
                 <Route path="*" element={<Navigate to="/login" />} />
             </Routes>

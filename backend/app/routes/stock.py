@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import func, case
-from datetime import datetime
+from datetime import datetime, timezone
 from app.database import get_db
 from app.models.stock import StockTransaction
 from app.models.spare_parts import SparePart, PartSetting
@@ -199,7 +199,7 @@ def delete_stock_transaction(
                        f"Delete the later issues of this part first."
             )
 
-    txn.deleted_at = datetime.utcnow()
+    txn.deleted_at = datetime.now(timezone.utc)
     txn.deleted_by = current_user.user_id
 
     if txn.direction == "OUT":
@@ -209,7 +209,7 @@ def delete_stock_transaction(
         link = db.query(ExpenseStockLink).filter(ExpenseStockLink.stock_txn_id == txn.stock_txn_id).first()
         exp = link and db.query(Expense).filter(Expense.expense_id == link.expense_id, Expense.deleted_at == None).first()
         if exp:
-            exp.deleted_at = datetime.utcnow()
+            exp.deleted_at = datetime.now(timezone.utc)
             exp.deleted_by = current_user.user_id
             db.add(AuditLog(table_name="expenses", record_id=exp.expense_id, action="DELETE",
                             old_value=f"auto-deleted with spare-part purchase {txn.stock_txn_id}",

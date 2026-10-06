@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from datetime import datetime
+from datetime import datetime, timezone
 from app.database import get_db
 from app.models.alerts import Alert
 from app.models.users import User
@@ -80,7 +80,7 @@ def delete_alert(
         if current_user.user_id != target_user.user_id and viewer_level <= target_level:
             raise HTTPException(status_code=403, detail="You cannot delete alerts belonging to this user")
 
-    alert.deleted_at = datetime.utcnow()
+    alert.deleted_at = datetime.now(timezone.utc)
     alert.deleted_by = current_user.user_id
     db.commit()
     return {"message": "Alert deleted"}

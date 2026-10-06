@@ -13,12 +13,19 @@ from app.models.mainbook import MainbookTransaction
 from app.models.stock import StockTransaction
 from app.models.spare_parts import SparePart
 from app.models.machines import Machine
+from app.models.locations import Location
 from app.machine_finance import machine_totals
 from app.auth import get_current_user
 from app.models.users import User
 from app.permissions import require_admin
 
 router = APIRouter(prefix="/reports", tags=["Reports"])
+
+
+def _current_site_id(db):
+    """Ledger reports cover the active site only, like the ledger pages."""
+    loc = db.query(Location).filter(Location.is_current == True).first()  # noqa: E712
+    return loc.location_id if loc else None
 
 
 def date_filter(query, model_date, from_date, to_date):
@@ -39,7 +46,7 @@ def expense_report(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin)
 ):
-    q = db.query(Expense).filter(Expense.deleted_at == None)
+    q = db.query(Expense).filter(Expense.deleted_at == None, Expense.location_id == _current_site_id(db))
     q = date_filter(q, Expense.txn_date, from_date, to_date)
     rows = q.order_by(Expense.txn_date).all()
     total = sum(float(e.debit or 0) for e in rows)
@@ -112,9 +119,11 @@ def mainbook_report(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin)
 ):
-    q = db.query(MainbookTransaction).filter(MainbookTransaction.deleted_at == None)
+    q = db.query(MainbookTransaction).filter(MainbookTransaction.deleted_at == None,
+                                             MainbookTransaction.location_id == _current_site_id(db))
     q = date_filter(q, MainbookTransaction.txn_date, from_date, to_date)
-    rows = q.order_by(MainbookTransaction.txn_date).all()
+    # Same order as the Mainbook page, so the balance column reads top to bottom.
+    rows = sorted(q.all(), key=lambda r: (r.txn_date, 0 if r.is_carry_forward else 1, r.transaction_id))
     return {
         "rows": [
             {"date": str(r.txn_date), "description": r.description,

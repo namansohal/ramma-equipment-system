@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import Optional
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from pydantic import BaseModel
 from app.database import get_db
 from app.models.downtime import MachineDowntime
@@ -205,7 +205,7 @@ def delete_downtime(
     dt = db.query(MachineDowntime).filter(MachineDowntime.downtime_id == downtime_id, MachineDowntime.deleted_at == None).first()
     if not dt:
         raise HTTPException(status_code=404, detail="Downtime record not found")
-    dt.deleted_at = datetime.utcnow()
+    dt.deleted_at = datetime.now(timezone.utc)
     dt.deleted_by = current_user.user_id
     db.add(AuditLog(table_name="machine_downtime", record_id=dt.downtime_id, action="DELETE",
                     old_value=f"machine={dt.machine_id} {dt.start_date}..{dt.end_date or 'ongoing'} reason={dt.reason}",

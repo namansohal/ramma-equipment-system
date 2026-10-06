@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Layout from '../components/Layout';
 import API, { changePassword, changeUsername } from '../services/api';
+import { siteChanged } from '../components/useSite';
 import * as ui from '../components/ui';
 
 export default function Account() {
@@ -60,6 +61,31 @@ export default function Account() {
             setUnLoading(false);
         }
     };
+
+    const [sites, setSites] = useState([]);
+    const [pickSite, setPickSite] = useState('');
+    const [confirmSite, setConfirmSite] = useState(false);
+    const [siteMsg, setSiteMsg] = useState('');
+    const loadSites = () => API.get('/locations/').then(r => {
+        setSites(r.data);
+        const cur = r.data.find(l => l.is_current);
+        setPickSite(cur ? String(cur.location_id) : '');
+    }).catch(() => {});
+    useEffect(() => { if (user.role === 'owner') loadSites(); }, []); // eslint-disable-line react-hooks/exhaustive-deps -- load once
+    const switchSite = async () => {
+        setSiteMsg('');
+        try {
+            const res = await API.post(`/locations/${pickSite}/make-current`);
+            setSiteMsg(res.data.message);
+            setConfirmSite(false);
+            siteChanged();
+            loadSites();
+        } catch (err) {
+            setSiteMsg(err.response?.data?.detail || 'Could not change the site');
+        }
+    };
+    const currentSite = sites.find(l => l.is_current);
+    const chosenSite = sites.find(l => String(l.location_id) === pickSite);
 
     const [backingUp, setBackingUp] = useState(false);
     const [backupMsg, setBackupMsg] = useState('');
@@ -132,6 +158,31 @@ export default function Account() {
                     </button>
                 </form>
             </div>
+            {user.role === 'owner' && sites.length > 0 && (
+                <div style={{ ...ui.card, maxWidth: '640px' }}>
+                    <div style={ui.cardTitle}>Active site</div>
+                    <p style={{ margin: '0 0 14px', fontSize: '14px', color: ui.colors.muted, lineHeight: 1.5 }}>
+                        Ledgers, reports and new entries all use the active site — for everyone. Change it when the company moves to another site.
+                    </p>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', alignItems: 'center' }}>
+                        <label htmlFor="site-pick" style={{ ...ui.label, marginBottom: 0 }}>Site</label>
+                        <select id="site-pick" value={pickSite} onChange={e => { setPickSite(e.target.value); setConfirmSite(false); setSiteMsg(''); }}
+                            style={{ ...ui.input, width: 'auto', minWidth: '180px' }}>
+                            {sites.map(l => <option key={l.location_id} value={l.location_id}>{l.name}{l.is_current ? ' (active)' : ''}</option>)}
+                        </select>
+                        {chosenSite && currentSite && chosenSite.location_id !== currentSite.location_id && (confirmSite ? (
+                            <>
+                                <span style={{ fontSize: '14px' }}>Switch everyone from {currentSite.name} to {chosenSite.name}?</span>
+                                <button type="button" style={ui.btn} onClick={switchSite}>Yes, switch</button>
+                                <button type="button" style={ui.btnSecondary} onClick={() => setConfirmSite(false)}>Cancel</button>
+                            </>
+                        ) : (
+                            <button type="button" style={ui.btn} onClick={() => setConfirmSite(true)}>Make active</button>
+                        ))}
+                    </div>
+                    {siteMsg && <p style={{ margin: '12px 0 0', fontSize: '14px' }} role="status">{siteMsg}</p>}
+                </div>
+            )}
             {user.role === 'owner' && (
                 <div style={{ ...ui.card, maxWidth: '640px' }}>
                     <div style={ui.cardTitle}>Backup</div>

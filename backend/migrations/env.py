@@ -5,7 +5,7 @@ from app.database import engine, Base
 import app.models  # noqa: F401  registers every table on Base.metadata
 from app.models import (  # noqa: F401
     locations, machines, users, spare_parts, expenses, stock, audit, downtime, mainbook,
-    loans, staff, links, machine_costs, machine_income, alerts, runtime, momo, customers,
+    loans, staff, links, machine_costs, machine_income, alerts, runtime, momo, customers, login_attempts,
 )
 
 target_metadata = Base.metadata

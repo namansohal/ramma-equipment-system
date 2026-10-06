@@ -24,7 +24,7 @@ def login(
     # Rightmost entry is the one appended by our own proxy; earlier ones are client-supplied.
     ip = forwarded.split(",")[-1].strip() if forwarded else (request.client.host if request.client else "unknown")
 
-    wait = login_limiter.retry_after(username, ip)
+    wait = login_limiter.retry_after(db, username, ip)
     if wait:
         raise HTTPException(
             status_code = status.HTTP_429_TOO_MANY_REQUESTS,
@@ -42,13 +42,13 @@ def login(
     )
 
     if not verify_password(form_data.password, user.password_hash if user else _DUMMY_HASH) or not user:
-        login_limiter.record_failure(username, ip)
+        login_limiter.record_failure(db, username, ip)
         raise HTTPException(
             status_code = status.HTTP_401_UNAUTHORIZED,
             detail      = "Incorrect username or password"
         )
 
-    login_limiter.reset(username)
+    login_limiter.reset(db, username)
 
     if not user.active:
         raise HTTPException(

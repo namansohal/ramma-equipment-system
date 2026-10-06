@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -150,7 +150,7 @@ def delete_payment(payment_id: int, db: Session = Depends(get_db), current_user:
     p = db.query(CustomerPayment).filter(CustomerPayment.payment_id == payment_id, CustomerPayment.deleted_at == None).first()
     if not p:
         raise HTTPException(status_code=404, detail="Payment not found")
-    p.deleted_at = datetime.utcnow()
+    p.deleted_at = datetime.now(timezone.utc)
     p.deleted_by = current_user.user_id
     db.add(AuditLog(table_name="customer_payments", record_id=p.payment_id, action="DELETE",
                     old_value=f"customer={p.customer_name} amount={p.amount}", changed_by=current_user.user_id))

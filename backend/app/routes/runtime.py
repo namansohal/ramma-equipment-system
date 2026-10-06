@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import Optional, List
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from pydantic import BaseModel
 from app.database import get_db
 from app.models.runtime import MachineRuntime
@@ -169,7 +169,7 @@ def delete_runtime(
     if not entry:
         raise HTTPException(status_code=404, detail="Runtime entry not found")
 
-    entry.deleted_at = datetime.utcnow()
+    entry.deleted_at = datetime.now(timezone.utc)
     entry.deleted_by = current_user.user_id
 
     db.add(AuditLog(

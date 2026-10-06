@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List, Optional
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from pydantic import BaseModel
 from app.database import get_db
 from app.models.momo import MomoTransaction
@@ -215,7 +215,7 @@ def bulk_delete_momo(
         if _is_linked(db, txn.momo_id):
             skipped += 1
             continue
-        txn.deleted_at = datetime.utcnow()
+        txn.deleted_at = datetime.now(timezone.utc)
         txn.deleted_by = current_user.user_id
         location_ids.add(txn.location_id)
         deleted_count += 1
@@ -250,7 +250,7 @@ def delete_momo(
     if _is_linked(db, txn.momo_id):
         raise HTTPException(status_code=400, detail=LINKED_MSG)
 
-    txn.deleted_at = datetime.utcnow()
+    txn.deleted_at = datetime.now(timezone.utc)
     txn.deleted_by = current_user.user_id
 
     _recompute_balances(db, txn.location_id)

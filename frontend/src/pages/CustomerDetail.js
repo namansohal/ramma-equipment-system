@@ -4,6 +4,7 @@ import Layout from '../components/Layout';
 import API from '../services/api';
 import * as ui from '../components/ui';
 import { money } from './Customers';
+import useSiteName from '../components/useSite';
 
 const { colors } = ui;
 
@@ -13,6 +14,7 @@ export default function CustomerDetail() {
     const [data, setData] = useState(null);
     const [error, setError] = useState('');
     const [confirmId, setConfirmId] = useState(null);
+    const site = useSiteName();
 
     const load = () => API.get('/customers/detail', { params: { key } })
         .then(r => setData(r.data))
@@ -47,7 +49,7 @@ export default function CustomerDetail() {
                         <div>
                             <div className="rs-eyebrow">Statement of account</div>
                             <h2 style={styles.name}>{data.name}</h2>
-                            <div style={styles.meta}>Ramma Equipment Co. · Kade · {today}</div>
+                            <div style={styles.meta}>Ramma Equipment Co.{site ? ` · ${site}` : ''} · {today}</div>
                         </div>
                         <div style={styles.totals}>
                             <div><span style={styles.k}>Billed</span><span style={styles.v}>{money(data.billed)}</span></div>
