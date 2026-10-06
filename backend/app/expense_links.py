@@ -1,7 +1,7 @@
 """Expenses created by another record (a spare-part purchase, a mainbook entry,
 a loan or a loan repayment) must be deleted and restored together with it,
 otherwise the books stop matching."""
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from sqlalchemy.orm import Session
 from app.models.audit import AuditLog
@@ -37,7 +37,7 @@ def delete_blocked_reason(db: Session, expense) -> Optional[str]:
 
 def delete_linked(db: Session, expense, user_id: int):
     """Delete the loan / repayment that this expense represents."""
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     loan = db.query(Loan).filter(Loan.expense_id == expense.expense_id, Loan.deleted_at == None).first()
     if loan:
         loan.deleted_at, loan.deleted_by = now, user_id

@@ -23,7 +23,6 @@ os.environ.pop("GEMINI_API_KEY", None)
 from fastapi.testclient import TestClient  # noqa: E402
 from app.main import app  # noqa: E402
 from app.database import Base, engine, SessionLocal  # noqa: E402
-from app import login_limiter  # noqa: E402
 
 OWNER = ("owner", "ChangeMe2026!")   # created by app.seed
 
@@ -79,7 +78,6 @@ def api():
     db.add(SparePart(name="Air Filter", active=True))
     db.add(SparePart(name="Never Bought", active=True))
     db.commit()
-    login_limiter._failures.clear()
 
     with TestClient(app, raise_server_exceptions=False) as client:
         yield Api(client, db)

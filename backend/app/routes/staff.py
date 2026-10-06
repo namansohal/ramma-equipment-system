@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import Optional
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from pydantic import BaseModel
 from app.database import get_db
 from app.models.staff import Staff
@@ -134,7 +134,7 @@ def remove_staff(
         raise HTTPException(status_code=404, detail="Staff not found")
 
     s.active = False
-    s.deleted_at = datetime.utcnow()
+    s.deleted_at = datetime.now(timezone.utc)
     s.deleted_by = current_user.user_id
 
     db.add(AuditLog(

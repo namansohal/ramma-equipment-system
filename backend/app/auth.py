@@ -1,6 +1,7 @@
-from datetime import datetime, timedelta
-from jose import JWTError, jwt
-from passlib.context import CryptContext
+from datetime import datetime, timedelta, timezone
+import bcrypt
+import jwt
+from jwt import PyJWTError as JWTError
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
@@ -25,14 +26,21 @@ if len(SECRET_KEY) < 32:
 if ALGORITHM not in ("HS256", "HS384", "HS512"):
     raise RuntimeError("ALGORITHM must be HS256, HS384 or HS512")
 
-pwd_context   = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
+# bcrypt only reads the first 72 bytes; cut explicitly (what passlib did) so
+# existing hashes keep matching and newer bcrypt versions don't raise.
+def _pw_bytes(password: str) -> bytes:
+    return (password or "").encode("utf-8")[:72]
+
 def verify_password(plain, hashed):
-    return pwd_context.verify(plain, hashed)
+    try:
+        return bcrypt.checkpw(_pw_bytes(plain), (hashed or "").encode("utf-8"))
+    except ValueError:  # not a bcrypt hash
+        return False
 
 def hash_password(password):
-    return pwd_context.hash(password)
+    return bcrypt.hashpw(_pw_bytes(password), bcrypt.gensalt()).decode("utf-8")
 
 def password_fingerprint(password_hash: str) -> str:
     """Short keyed digest of the stored hash. Changes whenever the password
@@ -41,7 +49,7 @@ def password_fingerprint(password_hash: str) -> str:
 
 def create_access_token(data: dict):
     to_encode = data.copy()
-    expire    = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    expire    = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 

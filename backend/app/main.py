@@ -2,8 +2,8 @@ import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.database import engine, Base
-from app.models import locations, machines, users, spare_parts, expenses, stock, audit, downtime, mainbook, loans, staff, links, machine_costs, machine_income, alerts, runtime, momo, customers
-from app.routes import auth, expenses as expenses_router, stock as stock_router, machines as machines_router, users as users_router, machine_detail as machine_detail_router, downtime as downtime_router, mainbook as mainbook_router, reports as reports_router, audit as audit_router, loans as loans_router, staff as staff_router, purchases as purchases_router, suggestions as suggestions_router, alerts as alerts_router, ai_extract as ai_extract_router, runtime as runtime_router, momo as momo_router, customers as customers_router, backup as backup_router
+from app.models import locations, machines, users, spare_parts, expenses, stock, audit, downtime, mainbook, loans, staff, links, machine_costs, machine_income, alerts, runtime, momo, customers, login_attempts
+from app.routes import auth, expenses as expenses_router, stock as stock_router, machines as machines_router, users as users_router, machine_detail as machine_detail_router, downtime as downtime_router, mainbook as mainbook_router, reports as reports_router, audit as audit_router, loans as loans_router, staff as staff_router, purchases as purchases_router, suggestions as suggestions_router, alerts as alerts_router, ai_extract as ai_extract_router, runtime as runtime_router, momo as momo_router, customers as customers_router, backup as backup_router, locations as locations_router
 
 app = FastAPI(title="Ramma Equipment System")
 
@@ -67,6 +67,7 @@ app.include_router(runtime_router.router)
 app.include_router(momo_router.router)
 app.include_router(customers_router.router)
 app.include_router(backup_router.router)
+app.include_router(locations_router.router)
 
 
 @app.get("/")

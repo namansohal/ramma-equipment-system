@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List, Optional
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from pydantic import BaseModel
 from app.database import get_db
 from app.models.mainbook import MainbookTransaction
@@ -78,7 +78,7 @@ def _delete_linked_expense(db: Session, transaction_id: int, deleted_by: int):
     if link:
         exp = db.query(Expense).filter(Expense.expense_id == link.expense_id, Expense.deleted_at == None).first()
         if exp:
-            exp.deleted_at = datetime.utcnow()
+            exp.deleted_at = datetime.now(timezone.utc)
             exp.deleted_by = deleted_by
             db.add(AuditLog(
                 table_name="expenses",
@@ -104,7 +104,7 @@ def _linked_momo(db: Session, transaction_id: int):
 def _delete_linked_momo(db: Session, transaction_id: int, deleted_by: int):
     m = _linked_momo(db, transaction_id)
     if m and m.deleted_at is None:
-        m.deleted_at = datetime.utcnow()
+        m.deleted_at = datetime.now(timezone.utc)
         m.deleted_by = deleted_by
         db.add(AuditLog(table_name="momo_transactions", record_id=m.momo_id, action="DELETE",
                         old_value=f"auto-deleted: linked mainbook entry {transaction_id} was deleted",
@@ -406,7 +406,7 @@ def bulk_delete_transactions(
         if not txn:
             continue
 
-        txn.deleted_at = datetime.utcnow()
+        txn.deleted_at = datetime.now(timezone.utc)
         txn.deleted_by = current_user.user_id
         location_ids.add(txn.location_id)
         deleted_count += 1
@@ -443,7 +443,7 @@ def delete_transaction(
     if not txn:
         raise HTTPException(status_code=404, detail="Transaction not found")
 
-    txn.deleted_at = datetime.utcnow()
+    txn.deleted_at = datetime.now(timezone.utc)
     txn.deleted_by = current_user.user_id
 
     _remove_machine_income(db, transaction_id, current_user.user_id)

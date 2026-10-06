@@ -2,9 +2,8 @@ from app.database import SessionLocal
 from app.models.locations import Location
 from app.models.machines import Machine
 from app.models.users import Role, User
-from passlib.context import CryptContext
+from app.auth import hash_password
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 def seed():
     db = SessionLocal()
@@ -66,7 +65,7 @@ def seed():
                 employee_code = "EMP001",
                 full_name     = "Owner",
                 username      = "owner",
-                password_hash = pwd_context.hash("ChangeMe2026!"),
+                password_hash = hash_password("ChangeMe2026!"),
                 role_id       = owner_role.role_id,
                 active        = True,
             )

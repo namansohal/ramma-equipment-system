@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from pydantic import BaseModel
 from app.database import get_db
 from app.models.expenses import Expense, ExpenseMachineLink, ExpenseType
@@ -268,7 +268,7 @@ def bulk_delete_expenses(
         if delete_blocked_reason(db, expense):
             skipped += 1
             continue
-        expense.deleted_at = datetime.utcnow()
+        expense.deleted_at = datetime.now(timezone.utc)
         expense.deleted_by = current_user.user_id
         delete_linked(db, expense, current_user.user_id)
         location_ids.add(expense.location_id)
@@ -306,7 +306,7 @@ def delete_expense(
     if reason:
         raise HTTPException(status_code=400, detail=reason)
 
-    expense.deleted_at = datetime.utcnow()
+    expense.deleted_at = datetime.now(timezone.utc)
     expense.deleted_by = current_user.user_id
     delete_linked(db, expense, current_user.user_id)
 

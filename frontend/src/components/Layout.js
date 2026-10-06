@@ -2,21 +2,22 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import Icon from './Icon';
 import { getUnreadAlertCount } from '../services/api';
+import useSiteName from './useSite';
 
 const NAV_GROUPS = [
     {
         name: 'Daily work',
         items: [
             { path: '/dashboard', label: 'Dashboard', icon: 'dashboard' },
-            { path: '/mainbook', label: 'Mainbook', icon: 'book' , noViewer: true },
-            { path: '/expenses', label: 'Expenses', icon: 'receipt' , noViewer: true },
-            { path: '/momo', label: 'MOMO', icon: 'phone' , noViewer: true },
+            { path: '/mainbook', label: 'Mainbook', icon: 'book', noViewer: true },
+            { path: '/expenses', label: 'Expenses', icon: 'receipt', noViewer: true },
+            { path: '/momo', label: 'MOMO', icon: 'phone', noViewer: true },
         ],
     },
     {
         name: 'Machines',
         items: [
-            { path: '/runtime', label: 'Runtime', icon: 'clock' , noViewer: true },
+            { path: '/runtime', label: 'Runtime', icon: 'clock', noViewer: true },
             { path: '/downtime', label: 'Downtime', icon: 'warn' },
             { path: '/stock', label: 'Spare Parts', icon: 'gear' },
             { path: '/machines', label: 'Machines', icon: 'truck' },
@@ -27,8 +28,8 @@ const NAV_GROUPS = [
         name: 'People & money',
         items: [
             { path: '/customers', label: 'Customers', icon: 'people', adminOnly: true },
-            { path: '/loans', label: 'Loans', icon: 'coins' , noViewer: true },
-            { path: '/reports', label: 'Reports', icon: 'chart' , noViewer: true },
+            { path: '/loans', label: 'Loans', icon: 'coins', noViewer: true },
+            { path: '/reports', label: 'Reports', icon: 'chart', adminOnly: true },
         ],
     },
     {
@@ -51,6 +52,7 @@ export default function Layout({ children }) {
     const isAdmin = user.role === 'owner' || user.role === 'manager';
     const isViewer = user.role === 'viewer';
     const [unread, setUnread] = useState(0);
+    const site = useSiteName();
 
     useEffect(() => {
         getUnreadAlertCount().then(res => setUnread(res.data.count || 0)).catch(() => {});
@@ -102,7 +104,7 @@ export default function Layout({ children }) {
                     <img src="/logo_r.jpeg" alt="" className="rs-logo" />
                     <div>
                         <div className="rs-brand-name">Ramma</div>
-                        <div className="rs-brand-sub">Equipment Co.</div>
+                        <div className="rs-brand-sub">{site ? `${site} site` : 'Equipment Co.'}</div>
                     </div>
                 </div>
 

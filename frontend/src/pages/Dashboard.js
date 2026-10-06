@@ -4,6 +4,7 @@ import Layout from '../components/Layout';
 import { getCurrentStock, getExpenses, isViewer } from '../services/api';
 import * as ui from '../components/ui';
 import Icon from '../components/Icon';
+import useSiteName from '../components/useSite';
 
 const { colors } = ui;
 
@@ -17,6 +18,7 @@ export default function Dashboard() {
     const today = localToday();
     // Viewers can't see money pages, so the dashboard shows them stock only.
     const viewer = isViewer();
+    const site = useSiteName();
     const navigate = useNavigate();
     const user = JSON.parse(localStorage.getItem('user') || '{}');
     const [stock, setStock] = useState(null);
@@ -69,7 +71,7 @@ export default function Dashboard() {
         <Layout>
             <div style={styles.head}>
                 <div>
-                    <div className="rs-eyebrow">{dateStr} · Kade</div>
+                    <div className="rs-eyebrow">{dateStr}{site ? ` · ${site}` : ''}</div>
                     <h1 className="rs-title">Good day, {user.full_name?.split(' ')[0]}</h1>
                 </div>
                 {!viewer && (
