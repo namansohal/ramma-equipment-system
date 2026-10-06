@@ -5,9 +5,9 @@ from app.database import get_db
 from app.models.machines import Machine
 from app.models.stock import StockTransaction
 from app.models.spare_parts import SparePart
-from app.models.expenses import Expense, ExpenseMachineLink
 from app.models.machine_costs import MachinePartCost
 from app.models.machine_income import MachineIncome
+from app.machine_finance import expense_shares
 from app.auth import get_current_user
 from app.models.users import User
 
@@ -48,23 +48,9 @@ def machine_detail(
         StockTransaction.deleted_at == None
     ).order_by(StockTransaction.txn_date.desc()).limit(20).all()
 
-    direct_expenses = db.query(
-        Expense.txn_date, Expense.description, Expense.debit
-    ).join(
-        ExpenseMachineLink, ExpenseMachineLink.expense_id == Expense.expense_id
-    ).filter(
-        ExpenseMachineLink.machine_id == machine_id,
-        Expense.deleted_at == None
-    ).all()
-
-    total_direct = db.query(
-        func.coalesce(func.sum(Expense.debit), 0)
-    ).join(
-        ExpenseMachineLink, ExpenseMachineLink.expense_id == Expense.expense_id
-    ).filter(
-        ExpenseMachineLink.machine_id == machine_id,
-        Expense.deleted_at == None
-    ).scalar()
+    # Expenses shared by several machines count only this machine's share.
+    direct_expenses = expense_shares(db, machine_id)
+    total_direct = sum(share for _, _, share in direct_expenses)
 
     part_costs = db.query(
         MachinePartCost.txn_date, SparePart.name, MachinePartCost.total_cost
@@ -83,8 +69,8 @@ def machine_detail(
     total_income = sum(float(i.amount) for i in income_rows)
 
     combined_expenses = [
-        {"date": str(e.txn_date), "description": e.description, "amount": float(e.debit or 0)}
-        for e in direct_expenses
+        {"date": str(e.txn_date), "description": e.description, "amount": round(share, 2)}
+        for _, e, share in direct_expenses
     ] + [
         {"date": str(p.txn_date), "description": f"{p.name} (part cost)", "amount": float(p.total_cost)}
         for p in part_costs

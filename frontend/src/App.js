@@ -15,6 +15,7 @@ import Audit from './pages/Audit';
 import Loans from './pages/Loans';
 import Staff from './pages/Staff';
 import Alerts from './pages/Alerts';
+import MachineProfit from './pages/MachineProfit';
 import Momo from './pages/Momo';
 import Runtime from './pages/Runtime';
 import API from './services/api';
@@ -72,6 +73,7 @@ export default function App() {
                 <Route path="/audit" element={<PrivateRoute><Audit /></PrivateRoute>} />
                 <Route path="/staff" element={<PrivateRoute><Staff /></PrivateRoute>} />
                 <Route path="/alerts" element={<PrivateRoute><Alerts /></PrivateRoute>} />
+                <Route path="/machine-profit" element={<PrivateRoute><MachineProfit /></PrivateRoute>} />
                 <Route path="/momo" element={<PrivateRoute><Momo /></PrivateRoute>} />
                 <Route path="/runtime" element={<PrivateRoute><Runtime /></PrivateRoute>} />
                 <Route path="/secret" element={<PrivateRoute><Secret /></PrivateRoute>} />

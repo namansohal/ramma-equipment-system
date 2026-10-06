@@ -20,6 +20,7 @@ const NAV_GROUPS = [
             { path: '/downtime', label: 'Downtime', icon: 'warn' },
             { path: '/stock', label: 'Spare Parts', icon: 'gear' },
             { path: '/machines', label: 'Machines', icon: 'truck' },
+            { path: '/machine-profit', label: 'Machine Profit', icon: 'chart', adminOnly: true },
         ],
     },
     {
@@ -58,7 +59,9 @@ export default function Layout({ children }) {
         navigate('/login');
     };
 
-    const groups = NAV_GROUPS.filter(g => !g.adminOnly || isAdmin);
+    const groups = NAV_GROUPS
+        .filter(g => !g.adminOnly || isAdmin)
+        .map(g => ({ ...g, items: g.items.filter(i => !i.adminOnly || isAdmin) }));
 
     // Machine detail pages live under /machines/:id and highlight "Machines".
     const isActive = (path) => location.pathname === path || (path === '/machines' && location.pathname.startsWith('/machines/'));
