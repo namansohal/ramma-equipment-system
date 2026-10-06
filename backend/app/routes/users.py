@@ -31,6 +31,30 @@ class RoleChange(BaseModel):
     new_role_id: int
 
 
+def _retire_identifiers(user: User):
+    """Usernames and employee codes are unique in the database, including removed
+    accounts. Rename a removed account's ones so they can be given to someone new
+    (the original values stay in the audit log)."""
+    tag = f"~removed-{user.user_id}"
+    if user.username and not user.username.endswith(tag):
+        user.username = user.username[:50 - len(tag)] + tag
+    user.employee_code = None
+
+
+def _free_for_reuse(db: Session, username: Optional[str] = None, code: Optional[str] = None):
+    """Free a username / code still held by a removed (inactive) account."""
+    q = db.query(User).filter(User.active == False)
+    holders = []
+    if username:
+        holders += q.filter(User.username == username).all()
+    if code:
+        holders += q.filter(User.employee_code == code).all()
+    for u in holders:
+        _retire_identifiers(u)
+    if holders:
+        db.flush()
+
+
 def _validate_password(password: str):
     if not password or len(password) < MIN_PASSWORD_LENGTH:
         raise HTTPException(
@@ -86,11 +110,16 @@ def create_user(
     if existing:
         raise HTTPException(status_code=400, detail="Username already exists")
 
+    code = (data.employee_code or "").strip() or None
+    if code and db.query(User).filter(User.employee_code == code, User.active == True).first():
+        raise HTTPException(status_code=400, detail="That employee code is already used by another employee")
+    _free_for_reuse(db, username=username, code=code)
+
     user = User(
         full_name=data.full_name.strip(),
         username=username,
         password_hash=hash_password(data.password),
-        employee_code=data.employee_code,
+        employee_code=code,
         role_id=data.role_id,
         active=True,
     )
@@ -132,12 +161,14 @@ def deactivate_user(
     if user.role.name == "manager" and current_user.role.name != "owner":
         raise HTTPException(status_code=403, detail="Only the owner can remove a manager")
 
+    old_username, old_code = user.username, user.employee_code
     user.active = False
+    _retire_identifiers(user)
     db.add(AuditLog(
         table_name="users",
         record_id=user.user_id,
         action="DELETE",
-        old_value=f"username={user.username} active=True",
+        old_value=f"username={old_username} code={old_code} active=True",
         new_value="active=False",
         changed_by=current_user.user_id,
     ))
@@ -171,6 +202,7 @@ def change_username(
                     detail=f"Username can only be changed once every 7 days. Try again in {7 - days_since} day(s)."
                 )
 
+    _free_for_reuse(db, username=new)
     old_username = current_user.username
     current_user.username = new
     current_user.username_changed_at = datetime.now(timezone.utc)
@@ -248,6 +280,8 @@ def change_code(
         if taken:
             raise HTTPException(status_code=400, detail="That code is already used by another employee")
 
+    if new:
+        _free_for_reuse(db, code=new)
     old_code = user.employee_code
     user.employee_code = new
 

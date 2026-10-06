@@ -1,3 +1,4 @@
+import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.database import engine, Base
@@ -19,6 +20,25 @@ app.add_middleware(
 )
 
 Base.metadata.create_all(bind=engine)
+
+
+def _backfill_part_costs():
+    """One-off catch-up: parts issued to machines before their cost was recorded."""
+    from app.database import SessionLocal
+    from app.stock_costs import backfill_part_costs
+    db = SessionLocal()
+    try:
+        added = backfill_part_costs(db)
+        if added:
+            logging.getLogger(__name__).info("Recorded cost for %d earlier part issue(s)", added)
+    except Exception:
+        db.rollback()
+        logging.getLogger(__name__).exception("Part cost backfill failed")
+    finally:
+        db.close()
+
+
+_backfill_part_costs()
 
 app.include_router(auth.router)
 app.include_router(expenses_router.router)

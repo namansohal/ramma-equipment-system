@@ -10,7 +10,9 @@ from app.models.mainbook import MainbookTransaction
 from app.models.stock import StockTransaction
 from app.models.momo import MomoTransaction
 from app.models.customers import CustomerPayment
-from app.models.links import MainbookExpenseLink
+from app.models.links import MainbookExpenseLink, ExpenseStockLink
+from app.expense_links import restore_blocked_reason, restore_linked
+from app.stock_costs import available, record_part_cost
 from app.models.machine_income import MachineIncome
 from app.routes.momo import _recompute_balances as _recompute_momo_balances
 from app.routes.mainbook import _recompute_mainbook_balances
@@ -130,13 +132,34 @@ def restore_record(
     if record.deleted_at is None:
         raise HTTPException(status_code=400, detail="Record is not deleted")
 
+    if table == "expenses":
+        reason = restore_blocked_reason(db, record)
+        if reason:
+            raise HTTPException(status_code=400, detail=reason)
+    if table == "stock_transactions" and record.direction == "OUT":
+        have = available(db, record.part_id)
+        if have < float(record.quantity):
+            raise HTTPException(status_code=400, detail=f"Can't restore: only {have:g} in stock, this issue used {float(record.quantity):g}.")
+
     record.deleted_at = None
     record.deleted_by = None
     # Running balances are stored per row, so they must be rebuilt after a restore.
     if table == "momo_transactions":
         _recompute_momo_balances(db, record.location_id)
     elif table == "expenses":
+        restore_linked(db, record, current_user.user_id)
         recompute_expense_balances(db, record.location_id)
+    elif table == "stock_transactions":
+        if record.direction == "OUT":
+            record_part_cost(db, record)
+        else:
+            link = db.query(ExpenseStockLink).filter(ExpenseStockLink.stock_txn_id == record.stock_txn_id).first()
+            exp = link and db.query(Expense).filter(Expense.expense_id == link.expense_id).first()
+            if exp and exp.deleted_at is not None:
+                exp.deleted_at, exp.deleted_by = None, None
+                db.add(AuditLog(table_name="expenses", record_id=exp.expense_id, action="RESTORE",
+                                new_value=f"restored with spare-part purchase {record.stock_txn_id}", changed_by=current_user.user_id))
+                recompute_expense_balances(db, exp.location_id)
     elif table == "mainbook_transactions":
         _restore_mainbook_side_effects(db, record, current_user.user_id)
         _recompute_mainbook_balances(db, record.location_id)

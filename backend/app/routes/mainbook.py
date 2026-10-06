@@ -167,6 +167,8 @@ def create_transaction(
         db.add(exp)
         db.flush()
         db.add(MainbookExpenseLink(transaction_id=txn.transaction_id, expense_id=exp.expense_id))
+        # The expense's running balance depends on its date; rebuild the book.
+        _recompute_expense_balances(db, location.location_id)
 
     if credit > 0 and data.machine_id:
         db.add(MachineIncome(
