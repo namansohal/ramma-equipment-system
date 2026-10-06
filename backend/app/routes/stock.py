@@ -12,6 +12,10 @@ from app.schemas.stock import StockTransactionCreate, StockTransactionResponse
 from app.auth import get_current_user
 from app.models.users import User
 from app.permissions import require_editor
+from app.models.expenses import Expense
+from app.models.links import ExpenseStockLink
+from app.ledger import recompute_expense_balances
+from app.stock_costs import available, record_part_cost, remove_part_cost
 
 router = APIRouter(prefix="/stock", tags=["Stock"])
 
@@ -41,20 +45,9 @@ def create_stock_transaction(
         raise HTTPException(status_code=404, detail="Part not found")
 
     if data.direction == "OUT":
-        current = db.query(
-            func.coalesce(func.sum(
-                case(
-                    (StockTransaction.direction == "IN", StockTransaction.quantity),
-                    else_=-StockTransaction.quantity
-                )
-            ), 0)
-        ).filter(
-            StockTransaction.part_id == data.part_id,
-            StockTransaction.deleted_at == None
-        ).scalar()
-
+        current = available(db, data.part_id)
         if current < data.quantity:
-            raise HTTPException(status_code=400, detail=f"Insufficient stock. Available: {current}")
+            raise HTTPException(status_code=400, detail=f"Insufficient stock. Available: {current:g}")
 
     location = db.query(Location).filter(Location.is_current == True).first()
 
@@ -72,6 +65,8 @@ def create_stock_transaction(
     )
     db.add(txn)
     db.flush()
+    # Charge the part to the machine it was issued to (at the latest purchase price).
+    record_part_cost(db, txn)
 
     db.add(AuditLog(
         table_name="stock_transactions",
@@ -149,8 +144,31 @@ def delete_stock_transaction(
     if not txn:
         raise HTTPException(status_code=404, detail="Transaction not found")
 
+    if txn.direction == "IN":
+        left = available(db, txn.part_id) - float(txn.quantity)
+        if left < 0:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Can't delete: {left + float(txn.quantity):g} in stock and {float(txn.quantity):g} would be removed. "
+                       f"Delete the later issues of this part first."
+            )
+
     txn.deleted_at = datetime.utcnow()
     txn.deleted_by = current_user.user_id
+
+    if txn.direction == "OUT":
+        remove_part_cost(db, txn.stock_txn_id)
+    else:
+        # A purchase made from Spare Parts also created an expense; remove it with the stock.
+        link = db.query(ExpenseStockLink).filter(ExpenseStockLink.stock_txn_id == txn.stock_txn_id).first()
+        exp = link and db.query(Expense).filter(Expense.expense_id == link.expense_id, Expense.deleted_at == None).first()
+        if exp:
+            exp.deleted_at = datetime.utcnow()
+            exp.deleted_by = current_user.user_id
+            db.add(AuditLog(table_name="expenses", record_id=exp.expense_id, action="DELETE",
+                            old_value=f"auto-deleted with spare-part purchase {txn.stock_txn_id}",
+                            changed_by=current_user.user_id))
+            recompute_expense_balances(db, exp.location_id)
 
     db.add(AuditLog(
         table_name="stock_transactions",

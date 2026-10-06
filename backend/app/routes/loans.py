@@ -12,6 +12,7 @@ from app.models.audit import AuditLog
 from app.auth import get_current_user
 from app.models.users import User
 from app.permissions import require_editor
+from app.ledger import recompute_expense_balances
 
 router = APIRouter(prefix="/loans", tags=["Loans"])
 
@@ -29,14 +30,8 @@ class RepaymentCreate(BaseModel):
 
 
 def _recompute_expense_balances(db: Session, location_id: int):
-    rows = db.query(Expense).filter(
-        Expense.location_id == location_id,
-        Expense.deleted_at == None
-    ).order_by(Expense.expense_id).all()
-    balance = 0.0
-    for r in rows:
-        balance = balance + float(r.credit or 0) - float(r.debit or 0)
-        r.balance = balance
+    # Same ledger order as the Expenses page (by date), not entry order.
+    recompute_expense_balances(db, location_id)
 
 
 def create_loan_with_expense(db: Session, staff_id: int, amount: float, issued_date: date, notes: str, current_user: User) -> Loan:
@@ -114,7 +109,7 @@ def list_loans(
     loans = db.query(Loan).filter(Loan.deleted_at == None).order_by(Loan.issued_date.desc()).all()
     result = []
     for l in loans:
-        paid = db.query(LoanRepayment).filter(LoanRepayment.loan_id == l.loan_id).all()
+        paid = db.query(LoanRepayment).filter(LoanRepayment.loan_id == l.loan_id, LoanRepayment.deleted_at == None).all()
         total_paid = sum(float(p.amount) for p in paid)
         remaining = float(l.amount) - total_paid
         result.append({

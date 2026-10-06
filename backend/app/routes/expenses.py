@@ -14,6 +14,7 @@ from app.models.users import User
 from app.permissions import require_admin, require_editor
 from app.text_utils import smart_capitalize
 from app.ledger import ordered_expense_rows, recompute_expense_balances, latest_window
+from app.expense_links import delete_blocked_reason, delete_linked
 
 router = APIRouter(prefix="/expenses", tags=["Expenses"])
 
@@ -231,14 +232,19 @@ def bulk_delete_expenses(
         raise HTTPException(status_code=400, detail="No entries selected")
 
     deleted_count = 0
+    skipped = 0
     location_ids = set()
 
     for expense_id in data.ids:
         expense = db.query(Expense).filter(Expense.expense_id == expense_id, Expense.deleted_at == None).first()
         if not expense:
             continue
+        if delete_blocked_reason(db, expense):
+            skipped += 1
+            continue
         expense.deleted_at = datetime.utcnow()
         expense.deleted_by = current_user.user_id
+        delete_linked(db, expense, current_user.user_id)
         location_ids.add(expense.location_id)
         deleted_count += 1
 
@@ -254,7 +260,10 @@ def bulk_delete_expenses(
         _recompute_expense_balances(db, loc_id)
 
     db.commit()
-    return {"message": f"{deleted_count} expense(s) deleted"}
+    msg = f"{deleted_count} expense(s) deleted"
+    if skipped:
+        msg += f"; {skipped} skipped because they belong to a purchase, Mainbook entry or loan with repayments — delete those there"
+    return {"message": msg}
 
 
 @router.delete("/{expense_id}")
@@ -267,8 +276,13 @@ def delete_expense(
     if not expense:
         raise HTTPException(status_code=404, detail="Expense not found")
 
+    reason = delete_blocked_reason(db, expense)
+    if reason:
+        raise HTTPException(status_code=400, detail=reason)
+
     expense.deleted_at = datetime.utcnow()
     expense.deleted_by = current_user.user_id
+    delete_linked(db, expense, current_user.user_id)
 
     _recompute_expense_balances(db, expense.location_id)
 

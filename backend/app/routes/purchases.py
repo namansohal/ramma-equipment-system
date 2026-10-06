@@ -15,6 +15,7 @@ from app.models.alerts import Alert
 from app.models.users import User
 from app.auth import get_current_user
 from app.permissions import require_editor
+from app.ledger import recompute_expense_balances
 
 router = APIRouter(prefix="/purchases", tags=["Purchases"])
 
@@ -89,13 +90,6 @@ def purchase_spare_part(
 
     location = db.query(Location).filter(Location.is_current == True).first()
 
-    last = db.query(Expense).filter(
-        Expense.location_id == location.location_id,
-        Expense.deleted_at == None
-    ).order_by(Expense.expense_id.desc()).first()
-    last_balance = last.balance if last else 0
-    new_balance = float(last_balance) - float(total_amount)
-
     sp_type = db.query(ExpenseType).filter(ExpenseType.code == "spare_part").first()
 
     desc = f"Spare part: {part.name} x{data.quantity} @ {data.unit_price}/unit"
@@ -109,7 +103,7 @@ def purchase_spare_part(
         description=desc,
         debit=total_amount,
         credit=0,
-        balance=new_balance,
+        balance=0,  # set by recompute_expense_balances below
         is_common=False,
         created_by=current_user.user_id,
     )
@@ -133,6 +127,8 @@ def purchase_spare_part(
     db.flush()
 
     db.add(ExpenseStockLink(expense_id=expense.expense_id, stock_txn_id=stock_txn.stock_txn_id))
+    # Running balances are by date, so a back-dated purchase shifts later rows.
+    recompute_expense_balances(db, location.location_id)
 
     # Price-check alert: if this price is above the lowest ever recorded for this part
     overpaid = False

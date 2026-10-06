@@ -61,17 +61,13 @@ def machine_cost_report(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin)
 ):
-    q = db.query(
-        Machine.code,
-        func.coalesce(func.sum(Expense.debit), 0).label("total")
-    ).join(
-        ExpenseMachineLink, ExpenseMachineLink.machine_id == Machine.machine_id
-    ).join(
-        Expense, Expense.expense_id == ExpenseMachineLink.expense_id
-    ).filter(Expense.deleted_at == None)
-    q = date_filter(q, Expense.txn_date, from_date, to_date)
-    rows = q.group_by(Machine.code).order_by(Machine.code).all()
-    return {"rows": [{"machine": r.code, "total": float(r.total)} for r in rows]}
+    # Same figures as Machine Profit: shared expenses split evenly, plus part costs.
+    totals = machine_totals(db, from_date, to_date)
+    machines = {m.machine_id: m.code for m in db.query(Machine).all()}
+    rows = [{"machine": machines.get(mid, str(mid)), "total": round(t["cost"], 2)}
+            for mid, t in totals.items() if t["cost"]]
+    rows.sort(key=lambda r: r["machine"])
+    return {"rows": rows}
 
 
 @router.get("/machine-profit")
