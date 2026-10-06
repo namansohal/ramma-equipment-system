@@ -71,3 +71,13 @@ code {
 .rs-fleet { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; }
 @media (max-width: 1000px) { .rs-two { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 520px) { .rs-quick { grid-template-columns: minmax(0, 1fr); } }
+
+/* ---------- Printing (customer statements) ---------- */
+@media print {
+  body, .rs-shell { background: #fff !important; }
+  .rs-side, .no-print { display: none !important; }
+  .rs-main { margin-left: 0; padding: 0; }
+  .rs-head { display: none; }
+  .print-sheet { padding: 0 !important; }
+  tbody tr:hover td { background: none; }
+}

@@ -20,11 +20,13 @@ const NAV_GROUPS = [
             { path: '/downtime', label: 'Downtime', icon: 'warn' },
             { path: '/stock', label: 'Spare Parts', icon: 'gear' },
             { path: '/machines', label: 'Machines', icon: 'truck' },
+            { path: '/machine-profit', label: 'Machine Profit', icon: 'chart', adminOnly: true },
         ],
     },
     {
         name: 'People & money',
         items: [
+            { path: '/customers', label: 'Customers', icon: 'people', adminOnly: true },
             { path: '/loans', label: 'Loans', icon: 'coins' },
             { path: '/reports', label: 'Reports', icon: 'chart' },
         ],
@@ -58,10 +60,13 @@ export default function Layout({ children }) {
         navigate('/login');
     };
 
-    const groups = NAV_GROUPS.filter(g => !g.adminOnly || isAdmin);
+    const groups = NAV_GROUPS
+        .filter(g => !g.adminOnly || isAdmin)
+        .map(g => ({ ...g, items: g.items.filter(i => !i.adminOnly || isAdmin) }));
 
-    // Machine detail pages live under /machines/:id and highlight "Machines".
-    const isActive = (path) => location.pathname === path || (path === '/machines' && location.pathname.startsWith('/machines/'));
+    // Detail pages (/machines/:id, /customers/:key) highlight their list page.
+    const isActive = (path) => location.pathname === path ||
+        ((path === '/machines' || path === '/customers') && location.pathname.startsWith(path + '/'));
 
     let eyebrow = '';
     let title = '';

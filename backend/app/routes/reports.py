@@ -13,6 +13,7 @@ from app.models.mainbook import MainbookTransaction
 from app.models.stock import StockTransaction
 from app.models.spare_parts import SparePart
 from app.models.machines import Machine
+from app.machine_finance import machine_totals
 from app.auth import get_current_user
 from app.models.users import User
 from app.permissions import require_admin
@@ -71,6 +72,27 @@ def machine_cost_report(
     q = date_filter(q, Expense.txn_date, from_date, to_date)
     rows = q.group_by(Machine.code).order_by(Machine.code).all()
     return {"rows": [{"machine": r.code, "total": float(r.total)} for r in rows]}
+
+
+@router.get("/machine-profit")
+def machine_profit_report(
+    from_date: Optional[date] = None,
+    to_date: Optional[date] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin)
+):
+    """Per machine: hours worked, billed, received, costs and profit (received - costs)."""
+    totals = machine_totals(db, from_date, to_date)
+    machines = db.query(Machine).order_by(Machine.machine_id).all()
+    rows = []
+    for m in machines:
+        t = totals.get(m.machine_id, {"hours": 0, "billed": 0, "received": 0, "expenses": 0, "parts": 0, "cost": 0, "profit": 0})
+        rows.append({"machine_id": m.machine_id, "machine": m.code, **{k: round(v, 2) for k, v in t.items()}})
+    keys = ("hours", "billed", "received", "expenses", "parts", "cost", "profit")
+    return {
+        "rows": rows,
+        "totals": {k: round(sum(r[k] for r in rows), 2) for k in keys},
+    }
 
 
 @router.get("/stock")
@@ -173,6 +195,13 @@ def export_report(
         rows = [[r["machine"], r["total"]] for r in data["rows"]]
         buf = make_excel("Machine Cost Report", headers, rows)
         fname = "machine_cost_report.xlsx"
+
+    elif report_type == "machine-profit":
+        data = machine_profit_report(from_date, to_date, db, current_user)
+        headers = ["Machine", "Hours", "Billed (GHS)", "Received (GHS)", "Expenses (GHS)", "Parts (GHS)", "Total cost (GHS)", "Profit (GHS)"]
+        rows = [[r["machine"], r["hours"], r["billed"], r["received"], r["expenses"], r["parts"], r["cost"], r["profit"]] for r in data["rows"]]
+        buf = make_excel("Machine Profit", headers, rows)
+        fname = "machine_profit_report.xlsx"
 
     elif report_type == "stock":
         data = stock_report(db, current_user)

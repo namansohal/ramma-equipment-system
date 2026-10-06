@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, date
 from app.database import get_db
 from app.models.audit import AuditLog
 from app.models.users import User
@@ -9,7 +9,12 @@ from app.models.expenses import Expense
 from app.models.mainbook import MainbookTransaction
 from app.models.stock import StockTransaction
 from app.models.momo import MomoTransaction
+from app.models.customers import CustomerPayment
+from app.models.links import MainbookExpenseLink
+from app.models.machine_income import MachineIncome
 from app.routes.momo import _recompute_balances as _recompute_momo_balances
+from app.routes.mainbook import _recompute_mainbook_balances
+from app.ledger import recompute_expense_balances
 from app.auth import get_current_user
 from app.permissions import require_admin
 
@@ -47,6 +52,48 @@ def list_audit(
     ]
 
 
+def _restore_mainbook_side_effects(db: Session, txn: MainbookTransaction, user_id: int):
+    """Undo what deleting a mainbook entry also did: the linked expense was
+    soft-deleted and its machine income rows were removed (and logged)."""
+    link = db.query(MainbookExpenseLink).filter(MainbookExpenseLink.transaction_id == txn.transaction_id).first()
+    if link:
+        exp = db.query(Expense).filter(Expense.expense_id == link.expense_id).first()
+        if exp and exp.deleted_at is not None:
+            exp.deleted_at = None
+            exp.deleted_by = None
+            db.add(AuditLog(table_name="expenses", record_id=exp.expense_id, action="RESTORE",
+                            new_value=f"restored with mainbook entry {txn.transaction_id}", changed_by=user_id))
+            recompute_expense_balances(db, exp.location_id)
+
+    # Only income logged since the last time this entry's income was restored.
+    last_restore = db.query(AuditLog).filter(
+        AuditLog.table_name == "machine_income", AuditLog.record_id == txn.transaction_id,
+        AuditLog.action == "RESTORE",
+    ).order_by(AuditLog.audit_id.desc()).first()
+    q = db.query(AuditLog).filter(
+        AuditLog.table_name == "machine_income", AuditLog.record_id == txn.transaction_id,
+        AuditLog.action == "DELETE",
+    )
+    if last_restore:
+        q = q.filter(AuditLog.audit_id > last_restore.audit_id)
+    restored = 0
+    for log in q.all():
+        fields = dict(part.split("=", 1) for part in (log.old_value or "").split())
+        try:
+            db.add(MachineIncome(
+                machine_id=int(fields["machine_id"]),
+                transaction_id=txn.transaction_id,
+                amount=fields["amount"],
+                txn_date=date.fromisoformat(fields["txn_date"]),
+            ))
+            restored += 1
+        except (KeyError, ValueError):
+            continue
+    if restored:
+        db.add(AuditLog(table_name="machine_income", record_id=txn.transaction_id, action="RESTORE",
+                        new_value=f"{restored} income row(s) re-created", changed_by=user_id))
+
+
 @router.post("/restore/{table}/{record_id}")
 def restore_record(
     table: str,
@@ -62,6 +109,7 @@ def restore_record(
         "mainbook_transactions": MainbookTransaction,
         "stock_transactions": StockTransaction,
         "momo_transactions": MomoTransaction,
+        "customer_payments": CustomerPayment,
     }
     Model = model_map.get(table)
     if not Model:
@@ -72,6 +120,7 @@ def restore_record(
         "mainbook_transactions": "transaction_id",
         "stock_transactions": "stock_txn_id",
         "momo_transactions": "momo_id",
+        "customer_payments": "payment_id",
     }
     pk = pk_map[table]
 
@@ -83,8 +132,14 @@ def restore_record(
 
     record.deleted_at = None
     record.deleted_by = None
+    # Running balances are stored per row, so they must be rebuilt after a restore.
     if table == "momo_transactions":
         _recompute_momo_balances(db, record.location_id)
+    elif table == "expenses":
+        recompute_expense_balances(db, record.location_id)
+    elif table == "mainbook_transactions":
+        _restore_mainbook_side_effects(db, record, current_user.user_id)
+        _recompute_mainbook_balances(db, record.location_id)
 
     db.add(AuditLog(
         table_name=table,
