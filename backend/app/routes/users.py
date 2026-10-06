@@ -7,7 +7,7 @@ from app.database import get_db
 from app.models.users import User, Role
 from app.models.audit import AuditLog
 from app.schemas.users import UserCreate, UserResponse, PasswordChange
-from app.auth import get_current_user, hash_password, verify_password
+from app.auth import get_current_user, hash_password, verify_password, issue_token
 from app.permissions import require_admin
 
 router = APIRouter(prefix="/users", tags=["Users"])
@@ -337,4 +337,6 @@ def change_password(
         changed_by=current_user.user_id,
     ))
     db.commit()
-    return {"message": "Password changed successfully"}
+    # Every token issued before this change is now rejected. Hand back a fresh
+    # one so the session that made the change stays signed in.
+    return {"message": "Password changed successfully", "access_token": issue_token(current_user)}

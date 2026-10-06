@@ -1,6 +1,7 @@
 import os
 import json
 import base64
+import logging
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from pydantic import BaseModel
@@ -10,6 +11,13 @@ from app.models.users import User
 from app.permissions import require_editor
 
 router = APIRouter(prefix="/ai", tags=["AI Extraction"])
+logger = logging.getLogger(__name__)
+
+MAX_UPLOAD_BYTES = 8 * 1024 * 1024
+ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"}
+MAX_CHAT_MESSAGES = 40
+MAX_CHAT_CHARS = 60_000
+ALLOWED_MODES = {"expense", "runtime", "spare_parts"}
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
@@ -29,8 +37,14 @@ async def ai_chat(
     data: ChatRequest,
     current_user: User = Depends(get_current_user)
 ):
+    # General-purpose chat on the company's API key: owner only.
+    if current_user.role.name != "owner":
+        raise HTTPException(status_code=403, detail="Only the owner can use AI chat")
     if not GEMINI_API_KEY:
         raise HTTPException(status_code=500, detail="AI not configured on the server")
+    total_chars = sum(len(m.content) for m in data.messages) + len(data.system or "")
+    if not data.messages or len(data.messages) > MAX_CHAT_MESSAGES or total_chars > MAX_CHAT_CHARS:
+        raise HTTPException(status_code=400, detail="Conversation is empty or too long")
     try:
         client = genai.Client(api_key=GEMINI_API_KEY)
         contents = []
@@ -46,8 +60,9 @@ async def ai_chat(
             contents=contents,
         )
         return {"reply": response.text}
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"AI chat failed: {str(e)}")
+    except Exception:
+        logger.exception("AI chat failed")
+        raise HTTPException(status_code=502, detail="AI chat failed. Please try again.")
 
 
 @router.post("/extract-receipt")
@@ -59,8 +74,16 @@ async def extract_receipt(
     if not GEMINI_API_KEY:
         raise HTTPException(status_code=500, detail="AI extraction is not configured on the server")
 
-    contents = await file.read()
-    if len(contents) > 8 * 1024 * 1024:
+    if mode not in ALLOWED_MODES:
+        raise HTTPException(status_code=400, detail="Unknown extraction mode")
+    content_type = (file.content_type or "").lower()
+    if content_type not in ALLOWED_IMAGE_TYPES:
+        raise HTTPException(status_code=400, detail="Please upload a JPEG, PNG, WEBP or HEIC image")
+
+    # Read one byte past the limit so oversized uploads are rejected without
+    # holding the whole file in memory.
+    contents = await file.read(MAX_UPLOAD_BYTES + 1)
+    if len(contents) > MAX_UPLOAD_BYTES:
         raise HTTPException(status_code=400, detail="Image too large (max 8MB)")
 
     try:
@@ -122,7 +145,7 @@ Do not skip any line. If a numeric value is genuinely illegible, use null but st
         response = client.models.generate_content(
             model="gemini-3.5-flash-lite",
             contents=[
-                {"inline_data": {"mime_type": file.content_type or "image/jpeg", "data": base64.b64encode(contents).decode("utf-8")}},
+                {"inline_data": {"mime_type": content_type, "data": base64.b64encode(contents).decode("utf-8")}},
                 {"text": prompt},
             ],
         )
@@ -176,5 +199,6 @@ Do not skip any line. If a numeric value is genuinely illegible, use null but st
 
     except json.JSONDecodeError:
         raise HTTPException(status_code=502, detail="Could not read data from the image. Try a clearer photo.")
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"AI extraction failed: {str(e)}")
+    except Exception:
+        logger.exception("AI extraction failed")
+        raise HTTPException(status_code=502, detail="AI extraction failed. Please try again.")

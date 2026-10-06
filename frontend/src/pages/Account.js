@@ -31,7 +31,9 @@ export default function Account() {
         }
         setPwLoading(true);
         try {
-            await changePassword({ old_password: pwForm.old_password, new_password: pwForm.new_password });
+            const res = await changePassword({ old_password: pwForm.old_password, new_password: pwForm.new_password });
+            // Old tokens stop working once the password changes; keep this session signed in.
+            if (res.data?.access_token) localStorage.setItem('token', res.data.access_token);
             setPwSuccess('Password changed successfully');
             setPwForm({ old_password: '', new_password: '', confirm: '' });
         } catch (err) {

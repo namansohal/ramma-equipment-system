@@ -95,7 +95,7 @@ export default function Audit() {
                                 </td>
                                 <td style={{ ...ui.td, textAlign: 'right' }}>
                                     {isOwner && l.action === 'DELETE' &&
-                                     ['expenses', 'mainbook_transactions', 'stock_transactions'].includes(l.table) && (
+                                     ['expenses', 'mainbook_transactions', 'stock_transactions', 'momo_transactions'].includes(l.table) && (
                                         <button onClick={() => restore(l)} style={styles.restoreBtn}>Restore</button>
                                     )}
                                 </td>

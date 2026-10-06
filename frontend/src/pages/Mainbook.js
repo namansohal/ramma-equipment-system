@@ -510,7 +510,7 @@ export default function Mainbook() {
                                 <span style={styles.wrap}>
                                     <span style={styles.bulkText}>{selected.size} selected</span>
                                     {admin && <button onClick={() => setShowDateChange(true)} style={styles.editBtn}>Change Date</button>}
-                                    <button onClick={() => setConfirmBulk(true)} style={styles.bulkDelBtn}>Delete Selected</button>
+                                    {admin && <button onClick={() => setConfirmBulk(true)} style={styles.bulkDelBtn}>Delete Selected</button>}
                                     <button onClick={clearSelection} style={styles.no}>Clear</button>
                                 </span>
                             )
