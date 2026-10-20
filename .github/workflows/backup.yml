@@ -1,7 +1,11 @@
 # Nightly PostgreSQL backup, kept as a private build artifact for 30 days.
 # Setup (once): repository Settings → Secrets and variables → Actions →
 # New repository secret, name BACKUP_DATABASE_URL, value = the database's
-# direct / session connection string (postgresql://user:pass@host:5432/db).
+# connection string (postgresql://user:pass@host:5432/db).
+# Supabase: use the "Session pooler" string (Project → Connect → Session pooler,
+# host ...pooler.supabase.com, port 5432, user postgres.<project-ref>). The
+# "Direct connection" string is IPv6-only and GitHub's runners can't reach it.
+# Do not use the "Transaction pooler" (port 6543): pg_dump doesn't work through it.
 # Run it by hand any time from the Actions tab → "Nightly database backup" → Run workflow.
 name: Nightly database backup
 

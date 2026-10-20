@@ -73,3 +73,21 @@ app.include_router(locations_router.router)
 @app.get("/")
 def root():
     return {"message": "Ramma Equipment System is running"}
+
+
+@app.get("/health")
+def health():
+    """Reads a table, so it counts as real database activity. A scheduled job
+    (.github/workflows/keepalive.yml) calls it daily; Supabase's free plan
+    pauses projects that see no activity for a week."""
+    from fastapi import HTTPException
+    from sqlalchemy import text
+    from app.database import SessionLocal
+    db = SessionLocal()
+    try:
+        db.execute(text("SELECT 1 FROM roles LIMIT 1")).first()
+        return {"status": "ok"}
+    except Exception:
+        raise HTTPException(status_code=503, detail="database unavailable")
+    finally:
+        db.close()

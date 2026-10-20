@@ -103,3 +103,8 @@ def test_site_switch_is_owner_only_and_scopes_reports(api):
     rep = ok(c.get("/reports/expenses", headers=h))
     assert rep["total"] == 40 and [r["description"] for r in rep["rows"]] == ["Anyanso Fuel"], rep
     assert len(ok(c.get("/expenses/", headers=h))) == 1                     # ledger agrees with report
+
+
+def test_health_endpoint_reads_the_database_and_needs_no_login(api):
+    r = api.c.get("/health")
+    assert r.status_code == 200 and r.json() == {"status": "ok"}
